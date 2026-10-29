@@ -12,8 +12,8 @@ Forge is built **on the target operating system and architecture**. A Windows ex
 | Windows 11 on Arm | ARM64 | Portable EXE inside ZIP |
 | Debian/Ubuntu and derivatives | x86_64 | DEB, RPM, TAR.GZ |
 | Modern Linux distributions | ARM64/aarch64 | DEB, RPM, TAR.GZ |
-| macOS | Intel x64 | ZIP containing an .app bundle |
-| macOS | Apple Silicon ARM64 | ZIP containing an .app bundle |
+| macOS 14+ | Intel x64 | ZIP containing an .app bundle |
+| macOS 14+ | Apple Silicon ARM64 | ZIP containing an .app bundle |
 
 **32-bit Windows (x86) is not included.** Forge uses Qt 6 through PySide6. Current supported PySide6 Windows wheels are available for x64 and ARM64, not Win32. Promising a working 32-bit EXE without replacing the GUI stack or building Qt independently would be misleading. The ready-made Qt 6 Forge binaries also do not target 32-bit Linux.
 
@@ -78,7 +78,7 @@ The executable is not publisher-signed, so SmartScreen may show an unknown-publi
 
 ## macOS
 
-Extract the ZIP and move ForgeSystemCenter.app to Applications. The Intel package is intended for Intel Macs; arm64 is for Apple Silicon. The apps are not currently signed or notarized by Apple, so macOS may show a Gatekeeper warning.
+macOS 14 or newer is required. Extract the ZIP and move ForgeSystemCenter.app to Applications. The Intel package is intended for Intel Macs; arm64 is for Apple Silicon. The apps are not currently signed or notarized by Apple, so macOS may show a Gatekeeper warning.
 
 ## Running builds and publishing
 
