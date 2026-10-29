@@ -22,6 +22,20 @@ echo "Forge installer"
 echo "Project: $APP_DIR"
 echo "Python:  $("$PYTHON_BIN" --version 2>&1)"
 echo
+if [[ -r /etc/os-release ]]; then
+  . /etc/os-release
+  case "${ID:-}" in
+    debian|ubuntu|linuxmint|pop)
+      echo "Debian/Ubuntu Qt runtime packages may be required:"
+      echo "  sudo apt install libegl1 libgl1 libxkbcommon-x11-0 libdbus-1-3 libxcb-cursor0 libxcb-icccm4 libxcb-keysyms1 libxcb-shape0 libxcb-xinerama0"
+      ;;
+    arch|cachyos|manjaro|endeavouros)
+      echo "Arch/CachyOS Qt runtime packages may be required:"
+      echo "  sudo pacman -S --needed libxcb xcb-util-cursor libxkbcommon mesa libglvnd fontconfig freetype2 dbus"
+      ;;
+  esac
+fi
+echo
 echo "This downloads PySide6 and psutil into an isolated .venv. It will not use sudo or modify system packages."
 read -r -p "Continue? [Y/n] " answer
 if [[ "$answer" =~ ^[Nn]$ ]]; then
