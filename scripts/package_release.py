@@ -36,7 +36,7 @@ StartupNotify=true
 def machine_labels() -> tuple[str, str, str, str]:
     machine = platform.machine().lower()
     if machine in {"x86_64", "amd64"}:
-        return "x64", "amd64", "x86_64", "2.35"
+        return "x86_64", "amd64", "x86_64", "2.35"
     if machine in {"aarch64", "arm64"}:
         return "arm64", "arm64", "aarch64", "2.39"
     raise SystemExit(f"Unsupported Linux architecture for this release workflow: {machine}")
@@ -141,6 +141,7 @@ def package_linux(output: Path) -> None:
     with tarfile.open(tar_path, "w:gz", compresslevel=9) as archive:
         archive.add(portable_root, arcname=portable_name)
     print("Created", tar_path)
+    shutil.rmtree(portable_root)
 
     with tempfile.TemporaryDirectory(prefix="forge-deb-") as temporary:
         deb_root = Path(temporary) / "root"
