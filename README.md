@@ -1,66 +1,88 @@
 # Forge System Center
 
-**Forge** is a local-first desktop control panel for Linux and Windows, built with Python and PySide6. The interface uses a graphite theme and keeps system data local.
+**Forge** — локальный центр управления компьютером для Linux и Windows. Интерфейс на русском языке, графитовая тема с фиолетовым акцентом, данные обрабатываются на устройстве.
 
-## Features
+<p align="center">
+  <img src="assets/forge.svg" alt="Forge logo" width="92">
+</p>
 
-- Live CPU, memory, root-disk, uptime, and process-count overview.
-- Process table with filtering, CPU and memory usage, and normal termination.
-- Mounted-volume overview and a read-only largest-entry folder scan.
-- Linux systemd user/system service inspection and confirmed start/stop/restart actions.
-- Current-user startup entry toggles for Linux and Windows startup folders.
-- Review and explicitly confirmed cleanup of the current user's `~/.cache` directory on Linux.
-- Linux desktop launcher, Windows Start Menu shortcut, and uninstall helper.
+## Что внутри
 
-## Requirements
+- **Обзор:** загрузка процессора, оперативная память, системный диск, число процессов и сведения об устройстве.
+- **Процессы:** поиск по имени, PID и пользователю; завершение процесса обычным сигналом без повышения привилегий.
+- **Накопители:** список доступных дисков и анализ крупных элементов выбранной папки.
+- **Службы:** просмотр и управление службами systemd в Linux. Действия запуска, остановки и перезапуска требуют подтверждения.
+- **Автозапуск:** просмотр записей текущего пользователя и обратимое включение/отключение.
+- **Очистка:** просмотр размера пользовательского кэша и очистка после отдельного подтверждения (Linux).
 
-- Python 3.10+
-- PySide6 6.10.x
-- psutil 5.9+
+## Требования
 
-## Install on Linux
+- Python 3.10 или новее
+- PySide6 6.x
+- psutil 5.9 или новее
 
-Extract or clone this folder somewhere you will keep it, then run:
+## Linux (CachyOS, Arch, Ubuntu и другие)
 
-```bash
+~~~bash
+git clone https://github.com/W0rd3r566/Forge-System-Center.git
+cd Forge-System-Center
 bash install.sh
-```
+~~~
 
-The installer creates an isolated `.venv` and a desktop entry under your home directory. It does not use sudo, install system packages, or make automatic system changes.
+После установки Forge появится в меню приложений. Запуск из папки проекта:
 
-## Install on Windows
+~~~bash
+bash run.sh
+~~~
 
-Install Python 3.10+, extract the repository, open PowerShell in the project directory, then run:
+Установщик создаёт виртуальное окружение и пользовательский ярлык. Он не использует sudo и не меняет системные пакеты.
 
-```powershell
+## Windows 10/11
+
+Установи Python 3.10+ с сайта [python.org](https://www.python.org/downloads/windows/) и включи опцию **Add Python to PATH**. Затем открой PowerShell в папке проекта:
+
+~~~powershell
 .\install.ps1
-```
+~~~
 
-After setup, launch with `run.bat` or use the Start Menu shortcut.
+Запуск:
 
-## Development
+~~~powershell
+.\run.bat
+~~~
 
-```bash
+Установщик создаёт виртуальное окружение и ярлык в меню «Пуск». Если PowerShell запрещает запуск локального скрипта, выполни в этом окне:
+
+~~~powershell
+Set-ExecutionPolicy -Scope Process Bypass
+.\install.ps1
+~~~
+
+## Разработка и тесты
+
+~~~bash
 python -m venv .venv
+# Linux
 source .venv/bin/activate
+# Windows PowerShell: .\.venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
 python -m unittest discover -s tests -v
 python run.py
-```
+~~~
 
-On Windows, activate the environment with `.venv\Scripts\Activate.ps1`.
+## Принципы безопасности
 
-## Safety notes
+- Нет аккаунта, телеметрии и обязательного сетевого подключения во время работы.
+- Сканирование папок читает файлы и не следует по символическим ссылкам.
+- Forge не повышает права для завершения процессов.
+- Службы и автозапуск меняются только после подтверждения.
+- Очистка ограничена пользовательским кэшем Linux; Forge не удаляет документы, загрузки или системные папки.
+- В Windows управление службами systemd недоступно; очистка кэша в текущей версии поддерживается только на Linux.
 
-- Forge has no account, telemetry, or required runtime network connection.
-- Process termination never escalates privileges.
-- Service changes are restricted to start/stop/restart and require explicit confirmation. System-level actions use the desktop authentication prompt.
-- Folder scans are read-only and do not follow symlinks.
-- Cache cleanup is limited to the current user's `~/.cache`; review the displayed path and confirmation prompt first.
-- Windows support is partial. Linux systemd service controls are not available on Windows.
+## Иконки
 
-This is an early MVP. Test it on your system before relying on it for administration.
+Контурные SVG-иконки выполнены в стиле [Tabler Icons](https://github.com/tabler/tabler-icons). См. файл THIRD_PARTY_NOTICES.md.
 
-## License
+## Лицензия
 
-MIT. See [LICENSE](LICENSE).
+MIT. Подробности в [LICENSE](LICENSE).
