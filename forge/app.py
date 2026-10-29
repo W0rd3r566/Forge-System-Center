@@ -407,7 +407,7 @@ class WallpaperHost(QWidget):
                 Qt.AspectRatioMode.IgnoreAspectRatio,
                 Qt.TransformationMode.SmoothTransformation,
             )
-        self._wallpaper_strength = max(0, min(70, int(strength)))
+        self._wallpaper_strength = max(0, min(100, int(strength)))
         self.update()
 
     def paintEvent(self, event: Any) -> None:
@@ -2192,12 +2192,13 @@ class ForgeWindow(QMainWindow):
         self.wallpaper_strength.setTickPosition(QSlider.TickPosition.TicksBelow)
         self.wallpaper_strength_label = QLabel("18%")
         self.wallpaper_strength.valueChanged.connect(lambda value: self.wallpaper_strength_label.setText(f"{value}%"))
+        self.wallpaper_strength.valueChanged.connect(self.preview_wallpaper)
         self.wallpaper_choose = self._button("Выбрать обои…", icon_name="folder")
         self.wallpaper_choose.setMinimumWidth(150)
         self.wallpaper_choose.clicked.connect(self.choose_wallpaper)
         self.wallpaper_clear = self._button("Убрать обои")
         self.wallpaper_clear.setMinimumWidth(112)
-        self.wallpaper_clear.clicked.connect(lambda: self.wallpaper_path.clear())
+        self.wallpaper_clear.clicked.connect(self.clear_wallpaper_preview)
         settings_controls = [
             ("Тема", self.theme_combo),
             ("Акцентный цвет", self.accent_combo),
@@ -2396,13 +2397,48 @@ class ForgeWindow(QMainWindow):
         self.custom_qss.setPlainText(str(settings.get("custom_qss", "")))
 
     def choose_wallpaper(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(self, "Выбери обои", str(Path.home()), "Изображения (*.png *.jpg *.jpeg *.webp *.bmp *.gif);;Все файлы (*)")
-        if path:
-            pixmap = QPixmap(path)
-            if pixmap.isNull():
-                QMessageBox.warning(self, "Не удалось открыть изображение", "Выбери поддерживаемое изображение PNG, JPEG, WebP, BMP или GIF.")
-                return
-            self.wallpaper_path.setText(path)
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Выбери обои",
+            str(Path.home()),
+            "Изображения (*.png *.jpg *.jpeg *.webp *.bmp *.gif);;Все файлы (*)",
+        )
+        if not path:
+            return
+        pixmap = QPixmap(path)
+        if pixmap.isNull():
+            QMessageBox.warning(
+                self,
+                "Не удалось открыть изображение",
+                "Qt не смог прочитать этот файл. Попробуй PNG, JPEG, WebP или BMP.",
+            )
+            return
+        self.wallpaper_path.setText(path)
+        self.preview_wallpaper()
+        self.statusBar().showMessage("Предпросмотр обоев включён. Нажми «Сохранить и применить», чтобы сохранить выбор.", 7000)
+
+    def preview_wallpaper(self, _strength: int | None = None) -> None:
+        """Preview wallpaper immediately, before the user saves preferences."""
+        if not hasattr(self, "wallpaper_host") or not hasattr(self, "wallpaper_strength"):
+            return
+        path = self.wallpaper_path.text().strip() if hasattr(self, "wallpaper_path") else ""
+        self.wallpaper_host.set_wallpaper(path, self.wallpaper_strength.value())
+        glass_enabled = bool(
+            self.glass_background_check.isChecked()
+            if hasattr(self, "glass_background_check")
+            else self.preferences.get("glass_background_enabled", False)
+        )
+        preview_preferences = dict(self.preferences)
+        if hasattr(self, "glass_tint_spin"):
+            preview_preferences["glass_tint_alpha"] = self.glass_tint_spin.value()
+        self.wallpaper_host.set_glass_preferences(preview_preferences)
+        self.wallpaper_host.set_glass_enabled(glass_enabled)
+        self.wallpaper_host.update()
+
+    def clear_wallpaper_preview(self) -> None:
+        self.wallpaper_path.clear()
+        self.preview_wallpaper()
+        self.statusBar().showMessage("Обои убраны из предпросмотра. Нажми «Сохранить и применить», чтобы сохранить выбор.", 6000)
 
     def choose_custom_accent(self) -> None:
         color = QColorDialog.getColor(QColor(str(self.accent_combo.currentData() or PURPLE)), self, "Выбрать акцентный цвет")
