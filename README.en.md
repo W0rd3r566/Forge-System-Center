@@ -38,6 +38,10 @@ Forge is local-first: no account, built-in analytics, or automatic upload of sys
     <td><h3>⌕ Diagnostics</h3>Quick checks for CPU, memory, disk space and available temperatures; a local Forge activity log; JSON diagnostic export.</td>
     <td><h3>✳ Personalization</h3>Built-in themes, accent colors, wallpapers, font size, sidebar width, refresh interval, custom QSS and portable appearance profiles.</td>
   </tr>
+  <tr>
+    <td><h3>⌘ Command palette</h3>Press Ctrl+K to navigate sections and run common actions from one searchable list.</td>
+    <td><h3>▤ Hardware and history</h3>CPU, memory, graphics and sensor details plus persistent local performance charts and CSV export.</td>
+  </tr>
 </table>
 
 ## Customization
@@ -72,9 +76,22 @@ Paste your rules into the QSS editor and select **Save and apply**. Custom style
 
 ## Installation
 
-### Linux · CachyOS, Arch, Ubuntu and more
+### Linux · CachyOS, Arch, Debian and more
 
-Python 3.10 or newer is required.
+Python 3.10 or newer is required. Arch/CachyOS may need the Qt/XCB runtime libraries:
+
+~~~bash
+sudo pacman -S --needed python python-pip libxcb xcb-util-cursor libxkbcommon mesa libglvnd fontconfig freetype2 dbus
+~~~
+
+Debian/Ubuntu:
+
+~~~bash
+sudo apt update
+sudo apt install python3 python3-venv python3-pip libegl1 libgl1 libxkbcommon-x11-0 libdbus-1-3 libxcb-cursor0 libxcb-icccm4 libxcb-keysyms1 libxcb-shape0 libxcb-xinerama0
+~~~
+
+Then, on either system:
 
 ~~~bash
 git clone https://github.com/W0rd3r566/Forge-System-Center.git
@@ -110,6 +127,14 @@ Set-ExecutionPolicy -Scope Process Bypass
 .\install.ps1
 .\run.bat
 ~~~
+
+## Command palette
+
+Press **Ctrl+K** or use the Commands button in the top bar. Search for a section or run an action such as refreshing system metrics, reading sensors, running diagnostics or exporting history.
+
+## Performance history
+
+Forge records CPU, memory, system-disk and available NVIDIA GPU usage about every 15 seconds to the current user's configuration directory. The history remains local, is size-bounded, and can be viewed, exported as CSV or cleared from the History page. Collection begins with the first run of version 0.2.0; earlier in-memory chart points are not backfilled.
 
 ## Platform support
 
