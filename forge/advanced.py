@@ -37,6 +37,19 @@ def default_preferences() -> dict[str, Any]:
         "custom_qss": "",
         "refresh_ms": 2500,
         "history_points": 120,
+        "custom_font": "Inter",
+        "corner_radius": 12,
+        "density": "comfortable",
+        "active_profile": "balanced",
+        "alerts_enabled": True,
+        "alert_cpu_threshold": 90,
+        "alert_memory_threshold": 90,
+        "alert_disk_threshold": 95,
+        "alert_temperature_threshold": 90,
+        "overlay_enabled": False,
+        "overlay_opacity": 94,
+        "overlay_refresh_ms": 1500,
+        "close_to_tray": False,
     }
 
 
@@ -59,10 +72,26 @@ def load_preferences() -> dict[str, Any]:
         settings["wallpaper_strength"] = max(0, min(70, int(settings["wallpaper_strength"])))
         settings["refresh_ms"] = max(1000, min(10000, int(settings["refresh_ms"])))
         settings["history_points"] = max(30, min(360, int(settings["history_points"])))
+        settings["corner_radius"] = max(4, min(28, int(settings["corner_radius"])))
+        settings["alert_cpu_threshold"] = max(50, min(100, int(settings["alert_cpu_threshold"])))
+        settings["alert_memory_threshold"] = max(50, min(100, int(settings["alert_memory_threshold"])))
+        settings["alert_disk_threshold"] = max(50, min(100, int(settings["alert_disk_threshold"])))
+        settings["alert_temperature_threshold"] = max(60, min(110, int(settings["alert_temperature_threshold"])))
+        settings["overlay_opacity"] = max(40, min(100, int(settings["overlay_opacity"])))
+        settings["overlay_refresh_ms"] = max(500, min(10000, int(settings["overlay_refresh_ms"])))
     except (ValueError, TypeError):
         defaults = default_preferences()
-        for key in ("font_size", "sidebar_width", "wallpaper_strength", "refresh_ms", "history_points"):
+        for key in ("font_size", "sidebar_width", "wallpaper_strength", "refresh_ms", "history_points", "corner_radius", "alert_cpu_threshold", "alert_memory_threshold", "alert_disk_threshold", "alert_temperature_threshold", "overlay_opacity", "overlay_refresh_ms"):
             settings[key] = defaults[key]
+    if not isinstance(settings["custom_font"], str) or not settings["custom_font"].strip():
+        settings["custom_font"] = "Inter"
+    settings["custom_font"] = settings["custom_font"][:100]
+    if settings["density"] not in {"compact", "comfortable", "spacious"}:
+        settings["density"] = "comfortable"
+    if settings["active_profile"] not in {"balanced", "gaming", "work", "quiet"}:
+        settings["active_profile"] = "balanced"
+    for key in ("alerts_enabled", "overlay_enabled", "close_to_tray"):
+        settings[key] = bool(settings.get(key, defaults[key]))
     if not isinstance(settings["wallpaper"], str):
         settings["wallpaper"] = ""
     if not isinstance(settings["custom_qss"], str):
