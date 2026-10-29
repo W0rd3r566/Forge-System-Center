@@ -49,6 +49,142 @@ ACCENT_OPTIONS = {
     "Розовый": "#f0b7cf", "Янтарный": "#f0c674", "Коралловый": "#ff879d",
     "Бирюзовый": "#65d4d0",
 }
+LIQUID_GLASS_QSS = r"""
+/* Liquid Glass for Forge. Qt alpha values range from 0 to 255. */
+#sidebar {
+    background-color: rgba(20, 21, 32, 218);
+    border-right: 1px solid rgba(190, 179, 255, 58);
+}
+#topbar {
+    background-color: rgba(17, 18, 28, 218);
+    border-bottom: 1px solid rgba(190, 179, 255, 55);
+}
+#panel, #metricCard, #systemChip {
+    background-color: rgba(29, 30, 45, 184);
+    border: 1px solid rgba(196, 184, 255, 66);
+    border-radius: 16px;
+}
+#hero {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+        stop:0 rgba(91, 76, 145, 192),
+        stop:0.52 rgba(34, 32, 52, 205),
+        stop:1 rgba(20, 22, 34, 218));
+    border: 1px solid rgba(202, 190, 255, 100);
+    border-radius: 18px;
+}
+#navButton {
+    background-color: rgba(255, 255, 255, 0);
+    border: 1px solid rgba(190, 179, 255, 0);
+    border-radius: 10px;
+}
+#navButton:hover {
+    background-color: rgba(255, 255, 255, 18);
+    border-color: rgba(190, 179, 255, 58);
+}
+#navButton:checked {
+    background-color: rgba(144, 124, 220, 78);
+    border: 1px solid rgba(190, 179, 255, 178);
+}
+#secondaryButton, #quickButton {
+    background-color: rgba(255, 255, 255, 15);
+    border: 1px solid rgba(205, 197, 255, 64);
+    border-radius: 10px;
+}
+#secondaryButton:hover, #quickButton:hover {
+    background-color: rgba(169, 155, 255, 38);
+    border-color: rgba(205, 197, 255, 135);
+}
+#primaryButton {
+    border-radius: 10px;
+    border: 1px solid rgba(230, 223, 255, 180);
+}
+QLineEdit, QComboBox, QSpinBox, QPlainTextEdit, QTableWidget, QListWidget {
+    background-color: rgba(18, 19, 30, 220);
+    border: 1px solid rgba(190, 179, 255, 70);
+    border-radius: 9px;
+    selection-background-color: rgba(133, 112, 215, 180);
+    selection-color: #ffffff;
+}
+QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QPlainTextEdit:focus {
+    border: 1px solid rgba(190, 179, 255, 220);
+    background-color: rgba(25, 25, 41, 232);
+}
+QComboBox::drop-down {
+    subcontrol-origin: padding;
+    subcontrol-position: top right;
+    width: 26px;
+    border-left: 1px solid rgba(190, 179, 255, 55);
+    background-color: rgba(255, 255, 255, 8);
+    border-top-right-radius: 8px;
+    border-bottom-right-radius: 8px;
+}
+QComboBox::drop-down:hover {
+    background-color: rgba(169, 155, 255, 32);
+}
+QComboBox QAbstractItemView {
+    background-color: rgb(27, 28, 42);
+    color: #f2f1f8;
+    border: 1px solid rgba(190, 179, 255, 135);
+    border-radius: 8px;
+    padding: 5px;
+    selection-background-color: rgba(133, 112, 215, 185);
+    outline: 0;
+}
+QSpinBox::up-button, QSpinBox::down-button {
+    subcontrol-origin: border;
+    width: 20px;
+    border: 0;
+    background-color: rgba(255, 255, 255, 8);
+}
+QSpinBox::up-button {
+    subcontrol-position: top right;
+    margin: 2px 2px 0 0;
+    border-top-right-radius: 6px;
+}
+QSpinBox::down-button {
+    subcontrol-position: bottom right;
+    margin: 0 2px 2px 0;
+    border-bottom-right-radius: 6px;
+}
+QSpinBox::up-button:hover, QSpinBox::down-button:hover {
+    background-color: rgba(169, 155, 255, 46);
+}
+QHeaderView::section {
+    background-color: rgba(255, 255, 255, 14);
+    color: #c4c1d6;
+    border: 0;
+    border-bottom: 1px solid rgba(190, 179, 255, 66);
+}
+QScrollBar:vertical, QScrollBar:horizontal {
+    background-color: rgba(255, 255, 255, 10);
+    border: 0;
+    border-radius: 5px;
+}
+QScrollBar:vertical { width: 9px; margin: 2px; }
+QScrollBar:horizontal { height: 9px; margin: 2px; }
+QScrollBar::handle:vertical, QScrollBar::handle:horizontal {
+    background-color: rgba(190, 179, 255, 105);
+    border-radius: 4px;
+    min-width: 24px;
+    min-height: 24px;
+}
+QScrollBar::handle:vertical:hover, QScrollBar::handle:horizontal:hover {
+    background-color: rgba(190, 179, 255, 165);
+}
+QScrollBar::add-line, QScrollBar::sub-line {
+    width: 0;
+    height: 0;
+    border: 0;
+}
+QToolTip {
+    color: #f2f1f8;
+    background-color: rgb(32, 31, 48);
+    border: 1px solid rgba(190, 179, 255, 150);
+    border-radius: 6px;
+    padding: 5px 8px;
+}
+"""
+
 FONT_SIZE = 13
 SIDEBAR_WIDTH = 238
 
@@ -223,9 +359,18 @@ class HistoryChart(QFrame):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         rect = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
-        painter.setPen(QPen(QColor(BORDER), 1))
-        painter.setBrush(QColor(PANEL))
-        painter.drawRoundedRect(rect, 11, 11)
+        glass_enabled = "/* Liquid Glass for Forge." in str(
+            getattr(self.window(), "preferences", {}).get("custom_qss", "")
+        )
+        chart_fill = QColor(PANEL)
+        chart_border = QColor(BORDER)
+        radius = 16 if glass_enabled else 11
+        if glass_enabled:
+            chart_fill.setAlpha(184)
+            chart_border.setAlpha(115)
+        painter.setPen(QPen(chart_border, 1))
+        painter.setBrush(chart_fill)
+        painter.drawRoundedRect(rect, radius, radius)
         painter.setPen(QColor(TEXT))
         painter.setFont(QFont("Inter", 10, QFont.Weight.DemiBold))
         painter.drawText(QRectF(16, 12, self.width() - 32, 20), Qt.AlignmentFlag.AlignLeft, self.title)
@@ -483,7 +628,12 @@ class ForgeWindow(QMainWindow):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         inner = QWidget()
+        # Allow cards to shrink to the viewport instead of forcing horizontal scrolling.
+        inner.setMinimumWidth(0)
+        inner.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         layout = QVBoxLayout(inner)
         layout.setContentsMargins(0, 0, 4, 0)
         layout.setSpacing(16)
@@ -1519,9 +1669,11 @@ class ForgeWindow(QMainWindow):
         self.theme_combo = QComboBox()
         for label, value in (("Graphite · графитовый", "graphite"), ("Midnight · полуночный", "midnight"), ("Emerald · изумрудный", "emerald"), ("Light · светлый", "light")):
             self.theme_combo.addItem(label, value)
+        self.theme_combo.setFixedWidth(220)
         self.accent_combo = QComboBox()
         for label, value in ACCENT_OPTIONS.items():
             self.accent_combo.addItem(label, value)
+        self.accent_combo.setFixedWidth(220)
         self.font_spin = QSpinBox()
         self.font_spin.setRange(10, 17)
         self.font_spin.setSuffix(" px")
@@ -1535,8 +1687,12 @@ class ForgeWindow(QMainWindow):
         self.history_spin = QSpinBox()
         self.history_spin.setRange(30, 360)
         self.history_spin.setSuffix(" точек")
+        for control in (self.font_spin, self.sidebar_spin, self.refresh_spin, self.history_spin):
+            control.setFixedWidth(150)
         self.wallpaper_path = QLineEdit()
         self.wallpaper_path.setReadOnly(True)
+        self.wallpaper_path.setMinimumWidth(100)
+        self.wallpaper_path.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.wallpaper_path.setPlaceholderText("Выбери локальное изображение…")
         self.wallpaper_strength = QSlider(Qt.Orientation.Horizontal)
         self.wallpaper_strength.setRange(0, 70)
@@ -1545,17 +1701,23 @@ class ForgeWindow(QMainWindow):
         self.wallpaper_strength_label = QLabel("18%")
         self.wallpaper_strength.valueChanged.connect(lambda value: self.wallpaper_strength_label.setText(f"{value}%"))
         self.wallpaper_choose = self._button("Выбрать обои…", icon_name="folder")
+        self.wallpaper_choose.setMinimumWidth(150)
         self.wallpaper_choose.clicked.connect(self.choose_wallpaper)
         self.wallpaper_clear = self._button("Убрать обои")
+        self.wallpaper_clear.setMinimumWidth(112)
         self.wallpaper_clear.clicked.connect(lambda: self.wallpaper_path.clear())
         for label, control in (("Тема", self.theme_combo), ("Акцентный цвет", self.accent_combo), ("Размер текста", self.font_spin), ("Ширина бокового меню", self.sidebar_spin), ("Частота обновления", self.refresh_spin), ("Длина истории графиков", self.history_spin)):
             row = QHBoxLayout()
+            row.setContentsMargins(0, 2, 0, 2)
+            row.setSpacing(14)
             name = QLabel(label)
             name.setObjectName("muted")
+            name.setMinimumWidth(175)
             row.addWidget(name, 1)
-            row.addWidget(control)
+            row.addWidget(control, 0, Qt.AlignmentFlag.AlignRight)
             appearance_layout.addLayout(row)
         wallpaper_row = QHBoxLayout()
+        wallpaper_row.setSpacing(8)
         wallpaper_row.addWidget(self.wallpaper_path, 1)
         wallpaper_row.addWidget(self.wallpaper_choose)
         wallpaper_row.addWidget(self.wallpaper_clear)
@@ -1581,17 +1743,20 @@ class ForgeWindow(QMainWindow):
         profile_layout.addLayout(profile_buttons)
         layout.addWidget(profile)
 
-        css, css_layout = self._card("Пользовательский CSS-подобный стиль (QSS)", "Forge использует Qt Style Sheets. Это синтаксис QSS, а не браузерный CSS: JavaScript не поддерживается. Стили применяются только к интерфейсу Forge.")
+        css, css_layout = self._card("Пользовательский стиль (QSS)", "Это Qt Style Sheets, а не браузерный CSS: backdrop-filter не поддерживается. Для эффекта Liquid Glass выбери локальные обои и выставь интенсивность примерно 35–55%.")
         self.custom_qss = QPlainTextEdit()
         self.custom_qss.setObjectName("customQssEditor")
         self.custom_qss.setMinimumHeight(230)
         self.custom_qss.setPlaceholderText("/* Пример: скруглить карточки */\n#panel { border-radius: 18px; }\n#navButton:checked { border: 1px solid #a99bff; }\nQPushButton { padding: 9px 14px; }")
         css_layout.addWidget(self.custom_qss)
         css_buttons = QHBoxLayout()
+        liquid_css = self._button("Применить Liquid Glass")
+        liquid_css.clicked.connect(self.apply_liquid_glass_preset)
         reset_css = self._button("Очистить пользовательские стили")
         reset_css.clicked.connect(lambda: self.custom_qss.clear())
         apply_css = self._button("Сохранить и применить", "primary", "check")
         apply_css.clicked.connect(self.apply_customization)
+        css_buttons.addWidget(liquid_css)
         css_buttons.addWidget(reset_css)
         css_buttons.addWidget(apply_css)
         css_buttons.addStretch(1)
@@ -1626,6 +1791,11 @@ class ForgeWindow(QMainWindow):
                 QMessageBox.warning(self, "Не удалось открыть изображение", "Выбери поддерживаемое изображение PNG, JPEG, WebP, BMP или GIF.")
                 return
             self.wallpaper_path.setText(path)
+
+    def apply_liquid_glass_preset(self) -> None:
+        """Load and apply the bundled translucent Qt stylesheet."""
+        self.custom_qss.setPlainText(LIQUID_GLASS_QSS)
+        self.apply_customization()
 
     def export_preferences(self) -> None:
         path, _ = QFileDialog.getSaveFileName(self, "Экспортировать профиль Forge", "forge-profile.json", "JSON (*.json)")
@@ -1754,17 +1924,29 @@ class ForgeWindow(QMainWindow):
             #secondaryButton:hover {{ background: #2a2b37; border-color: #514b70; }}
             #dangerButton {{ color: #ffdce2; background: #3a2029; border: 1px solid #60313e; border-radius: 8px; padding: 0 13px; }}
             #dangerButton:hover {{ background: #49252f; }}
-            QLineEdit, QComboBox {{ background: {PANEL}; color: {TEXT}; border: 1px solid {BORDER}; border-radius: 8px; padding: 9px 10px; selection-background-color: {PURPLE_DARK}; min-height: 18px; }}
-            QLineEdit:focus, QComboBox:focus {{ border-color: #665a99; }}
-            QComboBox QAbstractItemView {{ background: {PANEL}; border: 1px solid {BORDER}; selection-background-color: {PURPLE_DARK}; }}
+            QLineEdit, QComboBox, QSpinBox {{ background: {PANEL}; color: {TEXT}; border: 1px solid {BORDER}; border-radius: 8px; selection-background-color: {PURPLE_DARK}; min-height: 18px; }}
+            QLineEdit {{ padding: 8px 10px; }}
+            QComboBox {{ padding: 0 28px 0 10px; }}
+            QSpinBox {{ padding: 0 22px 0 10px; }}
+            QLineEdit:focus, QComboBox:focus, QSpinBox:focus {{ border-color: #8173bd; }}
+            QComboBox::drop-down {{ subcontrol-origin: padding; subcontrol-position: top right; width: 25px; border-left: 1px solid {BORDER}; background: transparent; border-top-right-radius: 7px; border-bottom-right-radius: 7px; }}
+            QComboBox::drop-down:hover {{ background: {PANEL_HOVER}; }}
+            QComboBox QAbstractItemView {{ background: {PANEL}; color: {TEXT}; border: 1px solid {BORDER}; selection-background-color: {PURPLE_DARK}; outline: 0; padding: 4px; }}
+            QSpinBox::up-button, QSpinBox::down-button {{ subcontrol-origin: border; width: 19px; border: 0; background: transparent; }}
+            QSpinBox::up-button {{ subcontrol-position: top right; margin: 2px 2px 0 0; border-top-right-radius: 6px; }}
+            QSpinBox::down-button {{ subcontrol-position: bottom right; margin: 0 2px 2px 0; border-bottom-right-radius: 6px; }}
+            QSpinBox::up-button:hover, QSpinBox::down-button:hover {{ background: {PANEL_HOVER}; }}
             #dataTable {{ background: {PANEL}; alternate-background-color: #1d1e28; border: 1px solid {BORDER}; border-radius: 9px; selection-background-color: #393252; selection-color: {TEXT}; outline: 0; }}
             #dataTable::item {{ padding: 7px 8px; border-bottom: 1px solid #242530; }}
             #dataTable::item:selected {{ background: #393252; }}
             QHeaderView::section {{ background: #20212b; color: {SOFT}; border: 0; border-bottom: 1px solid {BORDER}; padding: 10px 9px; font-size: 9px; font-weight: 800; }}
             QScrollArea {{ border: 0; background: transparent; }}
-            QScrollBar:vertical {{ background: {BG}; width: 9px; margin: 2px; }}
-            QScrollBar::handle:vertical {{ background: #363746; border-radius: 4px; min-height: 24px; }}
-            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0; }}
+            QScrollBar:vertical, QScrollBar:horizontal {{ background: rgba(255, 255, 255, 8); border: 0; border-radius: 4px; }}
+            QScrollBar:vertical {{ width: 9px; margin: 2px; }}
+            QScrollBar:horizontal {{ height: 9px; margin: 2px; }}
+            QScrollBar::handle:vertical, QScrollBar::handle:horizontal {{ background: #454558; border-radius: 4px; min-height: 24px; min-width: 24px; }}
+            QScrollBar::handle:vertical:hover, QScrollBar::handle:horizontal:hover {{ background: #655d8d; }}
+            QScrollBar::add-line, QScrollBar::sub-line {{ width: 0; height: 0; border: 0; }}
             QStatusBar {{ background: {SIDEBAR}; color: {MUTED}; border-top: 1px solid {BORDER}; font-size: 10px; }}
             QMessageBox, QDialog {{ background: {PANEL}; }}
             QListWidget {{ background: {PANEL}; color: {TEXT}; border: 1px solid {BORDER}; border-radius: 9px; outline: 0; }}
