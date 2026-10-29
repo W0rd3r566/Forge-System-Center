@@ -8,8 +8,8 @@ import time
 from pathlib import Path
 from typing import Any
 
-from PySide6.QtCore import QByteArray, Qt, QTimer, QSize, QRectF
-from PySide6.QtGui import QColor, QFont, QIcon, QKeySequence, QPainter, QPixmap, QPainterPath, QPen, QShortcut
+from PySide6.QtCore import QByteArray, QPointF, Qt, QTimer, QSize, QRectF
+from PySide6.QtGui import QBrush, QColor, QFont, QIcon, QKeySequence, QPainter, QPixmap, QPainterPath, QPen, QRadialGradient, QShortcut
 from PySide6.QtSvg import QSvgRenderer
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QFrame, QLabel, QPushButton,
@@ -52,24 +52,27 @@ ACCENT_OPTIONS = {
 LIQUID_GLASS_QSS = r"""
 /* Liquid Glass for Forge. Qt alpha values range from 0 to 255. */
 #sidebar {
-    background-color: rgba(20, 21, 32, 218);
-    border-right: 1px solid rgba(190, 179, 255, 58);
+    background-color: rgba(20, 21, 32, 132);
+    border-right: 1px solid rgba(225, 218, 255, 112);
 }
 #topbar {
-    background-color: rgba(17, 18, 28, 218);
-    border-bottom: 1px solid rgba(190, 179, 255, 55);
+    background-color: rgba(17, 18, 28, 122);
+    border-bottom: 1px solid rgba(235, 230, 255, 124);
 }
 #panel, #metricCard, #systemChip {
-    background-color: rgba(29, 30, 45, 184);
-    border: 1px solid rgba(196, 184, 255, 66);
-    border-radius: 16px;
+    background-color: rgba(29, 30, 45, 104);
+    border: 1px solid rgba(214, 204, 255, 118);
+    border-top: 1px solid rgba(250, 247, 255, 178);
+    border-left: 1px solid rgba(237, 232, 255, 138);
+    border-radius: 17px;
 }
 #hero {
     background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-        stop:0 rgba(91, 76, 145, 192),
-        stop:0.52 rgba(34, 32, 52, 205),
-        stop:1 rgba(20, 22, 34, 218));
-    border: 1px solid rgba(202, 190, 255, 100);
+        stop:0 rgba(115, 94, 190, 136),
+        stop:0.45 rgba(45, 40, 73, 122),
+        stop:1 rgba(20, 22, 34, 148));
+    border: 1px solid rgba(232, 225, 255, 166);
+    border-top: 1px solid rgba(255, 253, 255, 218);
     border-radius: 18px;
 }
 #navButton {
@@ -99,15 +102,16 @@ LIQUID_GLASS_QSS = r"""
     border: 1px solid rgba(230, 223, 255, 180);
 }
 QLineEdit, QComboBox, QSpinBox, QPlainTextEdit, QTableWidget, QListWidget {
-    background-color: rgba(18, 19, 30, 220);
-    border: 1px solid rgba(190, 179, 255, 70);
-    border-radius: 9px;
-    selection-background-color: rgba(133, 112, 215, 180);
+    background-color: rgba(18, 19, 30, 172);
+    border: 1px solid rgba(205, 194, 255, 112);
+    border-top: 1px solid rgba(248, 245, 255, 126);
+    border-radius: 10px;
+    selection-background-color: rgba(133, 112, 215, 190);
     selection-color: #ffffff;
 }
 QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QPlainTextEdit:focus {
-    border: 1px solid rgba(190, 179, 255, 220);
-    background-color: rgba(25, 25, 41, 232);
+    border: 1px solid rgba(226, 217, 255, 230);
+    background-color: rgba(35, 31, 57, 194);
 }
 QComboBox::drop-down {
     subcontrol-origin: padding;
@@ -315,27 +319,80 @@ class Heading(QWidget):
 
 
 class WallpaperHost(QWidget):
-    """Paint a local wallpaper behind the transparent content surface."""
+    """Paint the solid theme or a translucent, softly blurred glass backdrop."""
     def __init__(self) -> None:
         super().__init__()
         self._wallpaper = QPixmap()
+        self._soft_wallpaper = QPixmap()
         self._wallpaper_strength = 18
+        self._glass_enabled = False
         self.setObjectName("root")
         self.setAutoFillBackground(False)
+
+    def set_glass_enabled(self, enabled: bool) -> None:
+        self._glass_enabled = bool(enabled)
+        self.update()
 
     def set_wallpaper(self, path: str, strength: int) -> None:
         candidate = Path(path).expanduser() if path else Path()
         self._wallpaper = QPixmap(str(candidate)) if path and candidate.is_file() else QPixmap()
+        self._soft_wallpaper = QPixmap()
+        if not self._wallpaper.isNull():
+            # Downsample once and upscale while painting. This gives a cheap,
+            # cached frosted texture without doing expensive per-frame blur.
+            small_size = QSize(
+                max(1, min(220, self._wallpaper.width() // 14)),
+                max(1, min(140, self._wallpaper.height() // 14)),
+            )
+            self._soft_wallpaper = self._wallpaper.scaled(
+                small_size,
+                Qt.AspectRatioMode.IgnoreAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
         self._wallpaper_strength = max(0, min(70, int(strength)))
         self.update()
 
     def paintEvent(self, event: Any) -> None:
         painter = QPainter(self)
-        painter.fillRect(self.rect(), QColor(BG))
-        if not self._wallpaper.isNull() and self._wallpaper_strength > 0 and self.width() > 0 and self.height() > 0:
-            scaled = self._wallpaper.scaled(self.size(), Qt.AspectRatioMode.KeepAspectRatioByExpanding, Qt.TransformationMode.SmoothTransformation)
-            painter.setOpacity(self._wallpaper_strength / 100.0)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        if not self._glass_enabled:
+            painter.fillRect(self.rect(), QColor(BG))
+            if not self._wallpaper.isNull() and self._wallpaper_strength > 0 and self.width() > 0 and self.height() > 0:
+                scaled = self._wallpaper.scaled(self.size(), Qt.AspectRatioMode.KeepAspectRatioByExpanding, Qt.TransformationMode.SmoothTransformation)
+                painter.setOpacity(self._wallpaper_strength / 100.0)
+                painter.drawPixmap((self.width() - scaled.width()) // 2, (self.height() - scaled.height()) // 2, scaled)
+            painter.end()
+            return
+
+        if not self._soft_wallpaper.isNull() and self._wallpaper_strength > 0 and self.width() > 0 and self.height() > 0:
+            scaled = self._soft_wallpaper.scaled(
+                self.size(),
+                Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+            painter.setOpacity(min(0.82, max(0.20, self._wallpaper_strength / 65.0)))
             painter.drawPixmap((self.width() - scaled.width()) // 2, (self.height() - scaled.height()) // 2, scaled)
+
+        # No opaque fill here: alpha lets the desktop compositor show through.
+        tint = QColor(BG)
+        tint.setAlpha(130 if not self._soft_wallpaper.isNull() else 145)
+        painter.setOpacity(1.0)
+        painter.fillRect(self.rect(), tint)
+
+        width = max(1, self.width())
+        height = max(1, self.height())
+        glows = (
+            (QPointF(width * 0.18, height * 0.10), max(width, height) * 0.58, QColor(146, 121, 255, 62)),
+            (QPointF(width * 0.86, height * 0.28), max(width, height) * 0.46, QColor(107, 174, 255, 32)),
+            (QPointF(width * 0.46, height * 0.96), max(width, height) * 0.45, QColor(223, 184, 255, 28)),
+        )
+        for center, radius, color in glows:
+            gradient = QRadialGradient(center, radius)
+            gradient.setColorAt(0.0, color)
+            color.setAlpha(0)
+            gradient.setColorAt(1.0, color)
+            painter.fillRect(self.rect(), QBrush(gradient))
         painter.end()
 
 
@@ -478,6 +535,7 @@ class ForgeWindow(QMainWindow):
 
     def __init__(self, preferences: dict[str, Any] | None = None) -> None:
         super().__init__()
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self.preferences = dict(preferences or advanced.load_preferences())
         apply_palette(self.preferences)
         self.setWindowTitle("Forge · Центр системы")
@@ -1795,6 +1853,8 @@ class ForgeWindow(QMainWindow):
     def apply_liquid_glass_preset(self) -> None:
         """Load and apply the bundled translucent Qt stylesheet."""
         self.custom_qss.setPlainText(LIQUID_GLASS_QSS)
+        if not self.wallpaper_path.text().strip():
+            self.wallpaper_strength.setValue(50)
         self.apply_customization()
 
     def export_preferences(self) -> None:
@@ -1884,9 +1944,11 @@ class ForgeWindow(QMainWindow):
         advanced.log_event("Применены настройки оформления")
 
     def _apply_theme(self) -> None:
+        glass_enabled = "/* Liquid Glass for Forge." in str(self.preferences.get("custom_qss", ""))
+        self.wallpaper_host.set_glass_enabled(glass_enabled)
         base_style = f"""
             QWidget {{ background: transparent; color: {TEXT}; font-family: 'Inter', 'Noto Sans', 'Segoe UI', sans-serif; font-size: {FONT_SIZE}px; }}
-            QMainWindow {{ background: {BG}; }}
+            QMainWindow {{ background: {"transparent" if glass_enabled else BG}; }}
             #sidebar {{ background: {SIDEBAR}; border-right: 1px solid {BORDER}; }}
             #logoMark {{ background: transparent; }}
             #brandName {{ font-size: 17px; font-weight: 800; letter-spacing: 2px; color: {TEXT}; }}
