@@ -19,25 +19,25 @@ PROFILE_PRESETS: dict[str, dict[str, Any]] = {
         "refresh_ms": 2500, "history_points": 120, "alerts_enabled": True,
         "alert_cpu_threshold": 90, "alert_memory_threshold": 90,
         "alert_disk_threshold": 95, "alert_temperature_threshold": 90,
-        "overlay_refresh_ms": 1500, "overlay_opacity": 94,
+        "overlay_enabled": False, "overlay_refresh_ms": 1500, "overlay_opacity": 94,
     },
     "gaming": {
         "refresh_ms": 1500, "history_points": 180, "alerts_enabled": True,
         "alert_cpu_threshold": 96, "alert_memory_threshold": 94,
         "alert_disk_threshold": 96, "alert_temperature_threshold": 88,
-        "overlay_refresh_ms": 1000, "overlay_opacity": 96,
+        "overlay_enabled": True, "overlay_refresh_ms": 1000, "overlay_opacity": 96,
     },
     "work": {
         "refresh_ms": 2500, "history_points": 180, "alerts_enabled": True,
         "alert_cpu_threshold": 92, "alert_memory_threshold": 88,
         "alert_disk_threshold": 92, "alert_temperature_threshold": 90,
-        "overlay_refresh_ms": 2000, "overlay_opacity": 94,
+        "overlay_enabled": False, "overlay_refresh_ms": 2000, "overlay_opacity": 94,
     },
     "quiet": {
         "refresh_ms": 6000, "history_points": 90, "alerts_enabled": True,
         "alert_cpu_threshold": 95, "alert_memory_threshold": 94,
         "alert_disk_threshold": 97, "alert_temperature_threshold": 92,
-        "overlay_refresh_ms": 4000, "overlay_opacity": 88,
+        "overlay_enabled": False, "overlay_refresh_ms": 4000, "overlay_opacity": 88,
     },
 }
 
