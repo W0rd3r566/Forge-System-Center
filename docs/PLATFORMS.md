@@ -12,8 +12,8 @@ Forge собирается **на самой целевой ОС и архите
 | Windows 11 on Arm | ARM64 | ZIP с переносимым EXE |
 | Debian/Ubuntu и производные | x86_64 | DEB, RPM, TAR.GZ |
 | Современные Linux-дистрибутивы | ARM64/aarch64 | DEB, RPM, TAR.GZ |
-| macOS | Intel x64 | ZIP с приложением .app |
-| macOS | Apple Silicon ARM64 | ZIP с приложением .app |
+| macOS 14+ | Intel x64 | ZIP с приложением .app |
+| macOS 14+ | Apple Silicon ARM64 | ZIP с приложением .app |
 
 **32-битная Windows (x86) не входит в матрицу.** Forge использует Qt 6 через PySide6, а текущие поддерживаемые PySide6 Windows wheels доступны для x64 и ARM64, но не для Win32. Без замены GUI-стека или самостоятельной сборки Qt обещать рабочий 32-битный EXE было бы неправильно. Аналогично, готовые Qt6-бинарники Forge не предназначены для 32-битного Linux.
 
@@ -78,7 +78,7 @@ cd ForgeSystemCenter-<версия>-linux-x86_64
 
 ## macOS
 
-Распакуй ZIP и перемести ForgeSystemCenter.app в Applications. Пакет для Intel предназначен для Intel Mac, а arm64 — для Apple Silicon. Приложения пока не подписываются и не нотарифицируются сертификатом Apple, поэтому macOS может показать предупреждение Gatekeeper.
+Требуется macOS 14 или новее. Распакуй ZIP и перемести ForgeSystemCenter.app в Applications. Пакет для Intel предназначен для Intel Mac, а arm64 — для Apple Silicon. Приложения пока не подписываются и не нотарифицируются сертификатом Apple, поэтому macOS может показать предупреждение Gatekeeper.
 
 ## Запуск сборок и публикация
 
