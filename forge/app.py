@@ -190,6 +190,47 @@ QToolTip {
 }
 """
 
+
+ACRYLIC_QSS = r"""
+/* Soft Acrylic: subdued translucent surfaces with blue-lavender edges. */
+#sidebar { background-color: rgba(21, 25, 39, 218); border-right: 1px solid rgba(140, 170, 255, 70); }
+#topbar { background-color: rgba(18, 22, 35, 205); border-bottom: 1px solid rgba(140, 170, 255, 80); }
+#panel, #metricCard, #systemChip { background-color: rgba(32, 39, 58, 208); border: 1px solid rgba(140, 170, 255, 80); border-radius: 14px; }
+#hero { background: qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 rgba(72,92,154,210),stop:1 rgba(24,31,48,215)); border: 1px solid rgba(170,190,255,150); border-radius: 18px; }
+#navButton:checked { background-color: rgba(105,130,205,110); border: 1px solid #9fb8ff; }
+#secondaryButton, #quickButton { background-color: rgba(255,255,255,16); border: 1px solid rgba(150,170,220,90); border-radius: 10px; }
+QLineEdit, QComboBox, QSpinBox, QPlainTextEdit, QTableWidget, QListWidget { background-color: rgba(17,22,36,218); border: 1px solid rgba(140,170,255,90); border-radius: 9px; }
+QHeaderView::section { background-color: rgba(115,139,205,50); border-bottom: 1px solid rgba(140,170,255,90); }
+"""
+MIKU_QSS = r"""
+/* Cyan/lavender palette inspired by synthwave music tools. */
+#sidebar { background-color: #111c28; border-right: 1px solid #24505b; }
+#topbar { background-color: #111b27; border-bottom: 1px solid #24505b; }
+#panel, #metricCard, #systemChip { background-color: #172733; border: 1px solid #294d59; border-top: 1px solid #39717b; border-radius: 14px; }
+#hero { background: qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #244b5c,stop:0.55 #182c40,stop:1 #20223c); border: 1px solid #4b9aa0; border-radius: 18px; }
+#navButton:checked { background-color: #1d414d; border: 1px solid #65d4d0; color: #dfffff; }
+#navButton:hover { background-color: #203743; }
+#primaryButton { background-color: #65d4d0; color: #10202a; border: 1px solid #9afff3; border-radius: 10px; }
+#secondaryButton, #quickButton { background-color: #1b303d; border: 1px solid #315463; border-radius: 10px; }
+QLineEdit, QComboBox, QSpinBox, QPlainTextEdit, QTableWidget, QListWidget { background-color: #101e2a; border: 1px solid #2b5260; border-radius: 9px; }
+QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QPlainTextEdit:focus { border: 1px solid #65d4d0; }
+"""
+MINIMAL_QSS = r"""
+/* Minimal: quieter surfaces and low-contrast borders. */
+#sidebar, #topbar { background-color: transparent; border-color: rgba(160,160,180,45); }
+#panel, #metricCard, #systemChip { background-color: rgba(110,110,140,14); border: 1px solid rgba(180,175,205,42); border-radius: 8px; }
+#hero { background-color: rgba(120,110,160,24); border: 1px solid rgba(180,175,220,55); border-radius: 10px; }
+#navButton:checked { background-color: rgba(169,155,255,32); border: 1px solid rgba(169,155,255,100); }
+#secondaryButton, #quickButton { background-color: transparent; border: 1px solid rgba(170,170,190,60); border-radius: 7px; }
+QLineEdit, QComboBox, QSpinBox, QPlainTextEdit, QTableWidget, QListWidget { background-color: rgba(100,100,120,10); border: 1px solid rgba(170,170,190,50); border-radius: 7px; }
+"""
+QSS_PRESETS = {
+    "liquid_glass": LIQUID_GLASS_QSS,
+    "acrylic": ACRYLIC_QSS,
+    "miku": MIKU_QSS,
+    "minimal": MINIMAL_QSS,
+}
+
 FONT_SIZE = 13
 FONT_FAMILY = "Inter"
 SIDEBAR_WIDTH = 238
@@ -2253,7 +2294,23 @@ class ForgeWindow(QMainWindow):
         profile_layout.addLayout(profile_buttons)
         layout.addWidget(profile)
 
-        css, css_layout = self._card("Пользовательский стиль (QSS)", "Это Qt Style Sheets, а не браузерный CSS: backdrop-filter не поддерживается. Для эффекта Liquid Glass выбери локальные обои и выставь интенсивность примерно 35–55%.")
+        css, css_layout = self._card("Пользовательский стиль (QSS)", "Это Qt Style Sheets, а не браузерный CSS: backdrop-filter не поддерживается. Выбери пресет как стартовую точку, затем редактируй любые поддерживаемые свойства.")
+        preset_row = QHBoxLayout()
+        self.qss_preset_combo = QComboBox()
+        for label, key in (
+            ("Liquid Glass", "liquid_glass"),
+            ("Soft Acrylic", "acrylic"),
+            ("Miku Cyan", "miku"),
+            ("Minimal", "minimal"),
+            ("Пустой стиль", "empty"),
+        ):
+            self.qss_preset_combo.addItem(label, key)
+        self.qss_preset_combo.setMinimumWidth(200)
+        apply_preset_button = self._button("Загрузить пресет")
+        apply_preset_button.clicked.connect(self.apply_qss_preset)
+        preset_row.addWidget(self.qss_preset_combo, 1)
+        preset_row.addWidget(apply_preset_button)
+        css_layout.addLayout(preset_row)
         self.custom_qss = QPlainTextEdit()
         self.custom_qss.setObjectName("customQssEditor")
         self.custom_qss.setMinimumHeight(300)
@@ -2337,12 +2394,22 @@ class ForgeWindow(QMainWindow):
             index = self.accent_combo.findData(value)
         self.accent_combo.setCurrentIndex(index)
 
-    def apply_liquid_glass_preset(self) -> None:
-        """Load and apply the bundled translucent Qt stylesheet."""
-        self.custom_qss.setPlainText(LIQUID_GLASS_QSS)
-        if not self.wallpaper_path.text().strip():
+    def apply_qss_preset(self) -> None:
+        key = str(self.qss_preset_combo.currentData() or "liquid_glass")
+        if key == "empty":
+            self.custom_qss.clear()
+        else:
+            self.custom_qss.setPlainText(QSS_PRESETS.get(key, LIQUID_GLASS_QSS))
+        if key == "liquid_glass" and not self.wallpaper_path.text().strip():
             self.wallpaper_strength.setValue(50)
         self.apply_customization()
+
+    def apply_liquid_glass_preset(self) -> None:
+        """Compatibility shortcut for the Liquid Glass button."""
+        index = self.qss_preset_combo.findData("liquid_glass")
+        if index >= 0:
+            self.qss_preset_combo.setCurrentIndex(index)
+        self.apply_qss_preset()
 
 
     def choose_custom_accent(self) -> None:
@@ -2653,7 +2720,7 @@ def main() -> int:
     app.setStyle("Fusion")
     preferences = advanced.load_preferences()
     apply_palette(preferences)
-    font = QFont("Inter", FONT_SIZE)
+    font = QFont(FONT_FAMILY, FONT_SIZE)
     if not font.exactMatch():
         font = QFont("Noto Sans", FONT_SIZE)
     app.setFont(font)
