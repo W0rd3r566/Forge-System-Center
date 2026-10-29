@@ -22,21 +22,27 @@ jobs:
           - name: Windows x64
             runner: windows-latest
             slug: windows-x64
+            architecture: x64
           - name: Windows ARM64
             runner: windows-11-arm
             slug: windows-arm64
+            architecture: arm64
           - name: Linux x86_64
             runner: ubuntu-22.04
             slug: linux-x86_64
+            architecture: x64
           - name: Linux ARM64
             runner: ubuntu-24.04-arm
             slug: linux-arm64
+            architecture: arm64
           - name: macOS Intel
             runner: macos-15-intel
             slug: macos-x64
+            architecture: x64
           - name: macOS Apple Silicon
             runner: macos-latest
             slug: macos-arm64
+            architecture: arm64
 
     steps:
       - name: Check out source
@@ -56,6 +62,7 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          architecture: ${{ matrix.architecture }}
 
       - name: Install Forge and packaging dependencies
         run: |
