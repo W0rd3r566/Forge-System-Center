@@ -206,13 +206,13 @@ class HistoryChart(QFrame):
         self.title = title
         self.color = color
         self.points = max(30, min(360, int(points)))
-        self.values: list[float] = []
+        self.values: list[float | None] = []
         self.setMinimumHeight(174)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.setObjectName("historyChart")
 
-    def add_value(self, value: float) -> None:
-        self.values.append(max(0.0, min(100.0, float(value))))
+    def add_value(self, value: float | None) -> None:
+        self.values.append(None if value is None else max(0.0, min(100.0, float(value))))
         self.values = self.values[-self.points:]
         self.update()
 
@@ -226,7 +226,8 @@ class HistoryChart(QFrame):
         painter.setPen(QColor(TEXT))
         painter.setFont(QFont("Inter", 10, QFont.Weight.DemiBold))
         painter.drawText(QRectF(16, 12, self.width() - 32, 20), Qt.AlignmentFlag.AlignLeft, self.title)
-        current = f"{self.values[-1]:.0f}%" if self.values else "—"
+        latest = self.values[-1] if self.values else None
+        current = f"{latest:.0f}%" if latest is not None else "—"
         painter.setPen(QColor(self.color))
         painter.setFont(QFont("Inter", 11, QFont.Weight.Bold))
         painter.drawText(QRectF(16, 12, self.width() - 32, 20), Qt.AlignmentFlag.AlignRight, current)
@@ -237,13 +238,18 @@ class HistoryChart(QFrame):
             painter.drawLine(int(left), int(y), int(right), int(y))
         if len(self.values) > 1:
             path = QPainterPath()
+            previous_valid = False
             for index, value in enumerate(self.values):
+                if value is None:
+                    previous_valid = False
+                    continue
                 x = left + (right - left) * index / (len(self.values) - 1)
                 y = bottom - (bottom - top) * value / 100.0
-                if index == 0:
+                if not previous_valid:
                     path.moveTo(x, y)
                 else:
                     path.lineTo(x, y)
+                previous_valid = True
             painter.setPen(QPen(QColor(self.color), 2.2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
             painter.drawPath(path)
         painter.end()
@@ -970,8 +976,10 @@ class ForgeWindow(QMainWindow):
         charts.setSpacing(12)
         self.cpu_history = HistoryChart("Загрузка процессора", PURPLE, int(self.preferences.get("history_points", 120)))
         self.ram_history = HistoryChart("Использование памяти", GREEN, int(self.preferences.get("history_points", 120)))
+        self.gpu_history = HistoryChart("Загрузка NVIDIA GPU", "#82b7ff", int(self.preferences.get("history_points", 120)))
         charts.addWidget(self.cpu_history, 0, 0)
         charts.addWidget(self.ram_history, 0, 1)
+        charts.addWidget(self.gpu_history, 1, 0)
         layout.addLayout(charts)
         sensors, sensor_layout = self._card("Температуры и вентиляторы", "Набор датчиков зависит от оборудования, драйверов и прав доступа.")
         self.sensor_table = self._table(["ДАТЧИК", "ИСТОЧНИК", "ТЕМПЕРАТУРА"])
@@ -1018,6 +1026,8 @@ class ForgeWindow(QMainWindow):
                 self.sensor_table.setItem(0, 1, QTableWidgetItem("ОС или оборудование не предоставили показания"))
                 self.sensor_table.setItem(0, 2, QTableWidgetItem("—"))
             gpu = data.get("gpu")
+            if hasattr(self, "gpu_history"):
+                self.gpu_history.add_value(gpu.get("utilization") if gpu else None)
             if gpu:
                 parts = [gpu.get("name", "NVIDIA GPU")]
                 if gpu.get("temperature") is not None:
@@ -1205,6 +1215,9 @@ class ForgeWindow(QMainWindow):
         self.refresh_spin.setRange(1000, 10000)
         self.refresh_spin.setSingleStep(500)
         self.refresh_spin.setSuffix(" мс")
+        self.history_spin = QSpinBox()
+        self.history_spin.setRange(30, 360)
+        self.history_spin.setSuffix(" точек")
         self.wallpaper_path = QLineEdit()
         self.wallpaper_path.setReadOnly(True)
         self.wallpaper_path.setPlaceholderText("Выбери локальное изображение…")
@@ -1218,7 +1231,7 @@ class ForgeWindow(QMainWindow):
         self.wallpaper_choose.clicked.connect(self.choose_wallpaper)
         self.wallpaper_clear = self._button("Убрать обои")
         self.wallpaper_clear.clicked.connect(lambda: self.wallpaper_path.clear())
-        for label, control in (("Тема", self.theme_combo), ("Акцентный цвет", self.accent_combo), ("Размер текста", self.font_spin), ("Ширина бокового меню", self.sidebar_spin), ("Частота обновления", self.refresh_spin)):
+        for label, control in (("Тема", self.theme_combo), ("Акцентный цвет", self.accent_combo), ("Размер текста", self.font_spin), ("Ширина бокового меню", self.sidebar_spin), ("Частота обновления", self.refresh_spin), ("Длина истории графиков", self.history_spin)):
             row = QHBoxLayout()
             name = QLabel(label)
             name.setObjectName("muted")
@@ -1283,6 +1296,7 @@ class ForgeWindow(QMainWindow):
         self.font_spin.setValue(int(settings.get("font_size", 13)))
         self.sidebar_spin.setValue(int(settings.get("sidebar_width", 238)))
         self.refresh_spin.setValue(int(settings.get("refresh_ms", 2500)))
+        self.history_spin.setValue(int(settings.get("history_points", 120)))
         self.wallpaper_path.setText(str(settings.get("wallpaper", "")))
         self.wallpaper_strength.setValue(int(settings.get("wallpaper_strength", 18)))
         self.custom_qss.setPlainText(str(settings.get("custom_qss", "")))
@@ -1336,6 +1350,7 @@ class ForgeWindow(QMainWindow):
             "font_size": self.font_spin.value(),
             "sidebar_width": self.sidebar_spin.value(),
             "refresh_ms": self.refresh_spin.value(),
+            "history_points": self.history_spin.value(),
             "wallpaper": self.wallpaper_path.text().strip(),
             "wallpaper_strength": self.wallpaper_strength.value(),
             "custom_qss": self.custom_qss.toPlainText()[:30000],
@@ -1367,8 +1382,11 @@ class ForgeWindow(QMainWindow):
         self.proc_card.set_color("#82b7ff")
         self.cpu_history.color = PURPLE
         self.ram_history.color = GREEN
-        self.cpu_history.update()
-        self.ram_history.update()
+        self.gpu_history.color = "#82b7ff"
+        for chart in (self.cpu_history, self.ram_history, self.gpu_history):
+            chart.points = int(self.preferences.get("history_points", 120))
+            chart.values = chart.values[-chart.points:]
+            chart.update()
         self.top_status.setStyleSheet("")
         self.timer.setInterval(int(self.preferences.get("refresh_ms", 2500)))
         self.statusBar().showMessage("Настройки оформления сохранены и применены", 5000)
