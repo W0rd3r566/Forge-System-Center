@@ -90,6 +90,20 @@ QPushButton {
 
 ## Установка
 
+### Готовые сборки
+
+Рекомендуемый вариант: скачай архив под свою ОС и архитектуру со [страницы релизов](https://github.com/W0rd3r566/Forge-System-Center/releases/latest). Полная матрица, системные требования и инструкции для разных пакетов находятся в [справочнике платформ](docs/PLATFORMS.md).
+
+| Платформа | Готовые файлы |
+| --- | --- |
+| Windows x64 / ARM64 | ZIP с переносимым EXE |
+| Debian / Ubuntu x86_64 и ARM64 | DEB |
+| Fedora и RPM-совместимые системы | RPM |
+| CachyOS / Arch / Manjaro / другие Linux | TAR.GZ |
+| macOS Intel / Apple Silicon | ZIP с приложением .app |
+
+32-битные Windows и Linux сейчас не входят в матрицу: Qt 6 через PySide6 не предоставляет подходящие поддерживаемые колёса для этих целей. На Windows выбирай x64 для Intel/AMD и ARM64 для устройств на Windows on Arm. Linux-пакеты имеют разные минимальные требования к glibc, они подробно указаны в справочнике.
+
 ### Linux · CachyOS, Arch, Debian и другие
 
 Нужен Python 3.10 или новее. На Arch/CachyOS для графического интерфейса могут понадобиться системные библиотеки Qt/XCB:
