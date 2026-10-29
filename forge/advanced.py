@@ -48,9 +48,10 @@ def load_preferences() -> dict[str, Any]:
             settings.update({key: value for key, value in payload.items() if key in settings})
     except (OSError, ValueError, TypeError):
         pass
-    settings["theme"] = settings["theme"] if settings["theme"] in {"graphite", "midnight", "emerald", "light"} else "graphite"
+    if not isinstance(settings["theme"], str) or settings["theme"] not in {"graphite", "midnight", "emerald", "light"}:
+        settings["theme"] = "graphite"
     accents = {"#a99bff", "#82b7ff", "#83d6b0", "#f0b7cf", "#f0c674", "#ff879d", "#65d4d0"}
-    if settings["accent"] not in accents:
+    if not isinstance(settings["accent"], str) or settings["accent"] not in accents:
         settings["accent"] = "#a99bff"
     try:
         settings["font_size"] = max(10, min(17, int(settings["font_size"])))
@@ -66,6 +67,8 @@ def load_preferences() -> dict[str, Any]:
         settings["wallpaper"] = ""
     if not isinstance(settings["custom_qss"], str):
         settings["custom_qss"] = ""
+    settings["custom_qss"] = settings["custom_qss"][:30000]
+    settings["wallpaper"] = settings["wallpaper"][:4096]
     return settings
 
 
@@ -284,7 +287,7 @@ def create_diagnostic_report() -> dict[str, Any]:
             "interfaces": [{k: v for k, v in interface.items() if k != "ipv6" and k != "ipv4"} for interface in network["interfaces"]],
         },
         "disks": [
-            {key: value for key, value in disk.items() if key not in {"device"}}
+            {key: disk[key] for key in ("fstype", "used", "total", "free", "percent") if key in disk}
             for disk in system.list_disks()
         ],
         "top_processes": [
