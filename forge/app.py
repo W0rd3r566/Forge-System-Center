@@ -115,9 +115,11 @@ class MetricCard(QFrame):
         layout.setContentsMargins(18, 17, 18, 16)
         layout.setSpacing(12)
         top = QHBoxLayout()
-        mark = QLabel()
-        mark.setPixmap(icon(icon_name, color, 19).pixmap(19, 19))
-        top.addWidget(mark)
+        self.icon_name = icon_name
+        self.color = color
+        self.mark = QLabel()
+        self.mark.setPixmap(icon(icon_name, color, 19).pixmap(19, 19))
+        top.addWidget(self.mark)
         name = QLabel(title)
         name.setObjectName("muted")
         top.addWidget(name)
@@ -139,6 +141,11 @@ class MetricCard(QFrame):
         self.bar.setValue(0)
         self.bar.setStyleSheet(f"QProgressBar{{background:{BORDER};border:0;border-radius:2px}} QProgressBar::chunk{{background:{color};border-radius:2px}}")
         layout.addWidget(self.bar)
+
+    def set_color(self, color: str) -> None:
+        self.color = color
+        self.mark.setPixmap(icon(self.icon_name, color, 19).pixmap(19, 19))
+        self.bar.setStyleSheet(f"QProgressBar{{background:{BORDER};border:0;border-radius:2px}} QProgressBar::chunk{{background:{color};border-radius:2px}}")
 
     def update_value(self, value: str, detail: str, percent: float) -> None:
         self.value.setText(value)
@@ -266,6 +273,7 @@ class ForgeWindow(QMainWindow):
         self.setWindowIcon(QIcon(str(APP_ROOT / "assets" / "forge.svg")))
         self.process_rows: list[dict[str, Any]] = []
         self._network_previous: dict[str, Any] | None = None
+        self._last_alert_signature = ""
         self.service_rows: list[dict[str, Any]] = []
         self.startup_rows: list[dict[str, Any]] = []
         self._build_ui()
@@ -729,7 +737,23 @@ class ForgeWindow(QMainWindow):
                 self.refresh_sensors()
             if self.stack.currentWidget() == self.pages.get("Диагностика"):
                 self.refresh_diagnostics()
-            self.top_status.setText("●  СИСТЕМА ДОСТУПНА")
+            warnings: list[str] = []
+            if data["cpu"] >= 90:
+                warnings.append(f"высокая загрузка CPU ({data['cpu']:.0f}%)")
+            if data["memory_percent"] >= 90:
+                warnings.append(f"мало свободной памяти ({data['memory_percent']:.0f}% занято)")
+            if data["disk_percent"] >= 95:
+                warnings.append(f"мало места на системном диске ({data['disk_percent']:.0f}% занято)")
+            alert_signature = "|".join(warnings)
+            if warnings:
+                self.top_status.setText("●  ЕСТЬ ПРЕДУПРЕЖДЕНИЯ")
+                self.top_status.setStyleSheet(f"color: {RED}; background: {PANEL}; border: 1px solid {RED}; padding: 7px 10px; border-radius: 7px; font-size: 10px; font-weight: 700;")
+                if alert_signature != self._last_alert_signature:
+                    advanced.log_event("Системное предупреждение: " + "; ".join(warnings), "WARNING")
+            else:
+                self.top_status.setText("●  СИСТЕМА ДОСТУПНА")
+                self.top_status.setStyleSheet("")
+            self._last_alert_signature = alert_signature
         except Exception as exc:
             self.top_status.setText("●  НЕТ ДАННЫХ")
             self.statusBar().showMessage(f"Не удалось прочитать состояние системы: {exc}", 6000)
@@ -1021,20 +1045,20 @@ class ForgeWindow(QMainWindow):
         layout.addWidget(Heading("Сеть", "Скорость передачи, суммарный трафик и доступные интерфейсы.", refresh))
         cards = QGridLayout()
         cards.setSpacing(12)
-        download, self.download_value = self._card("↓  Получено")
+        download, download_layout = self._card("↓  Получено")
         self.download_value = QLabel("0 B/s")
         self.download_value.setObjectName("bigNumber")
-        download.layout().addWidget(self.download_value)
+        download_layout.addWidget(self.download_value)
         self.download_total = QLabel("Всего: —")
         self.download_total.setObjectName("muted")
-        download.layout().addWidget(self.download_total)
-        upload, _ = self._card("↑  Отправлено")
+        download_layout.addWidget(self.download_total)
+        upload, upload_layout = self._card("↑  Отправлено")
         self.upload_value = QLabel("0 B/s")
         self.upload_value.setObjectName("bigNumber")
-        upload.layout().addWidget(self.upload_value)
+        upload_layout.addWidget(self.upload_value)
         self.upload_total = QLabel("Всего: —")
         self.upload_total.setObjectName("muted")
-        upload.layout().addWidget(self.upload_total)
+        upload_layout.addWidget(self.upload_total)
         cards.addWidget(download, 0, 0)
         cards.addWidget(upload, 0, 1)
         layout.addLayout(cards)
@@ -1330,8 +1354,22 @@ class ForgeWindow(QMainWindow):
             if not font.exactMatch():
                 font = QFont("Noto Sans", FONT_SIZE)
             app.setFont(font)
-        self.setFont(QFont("Inter", FONT_SIZE))
+        if app is not None:
+            self.setFont(app.font())
         self._apply_theme()
+        for _title, icon_name, key in self.NAV:
+            button = self.nav_buttons.get(key)
+            if button is not None:
+                button.setIcon(icon(icon_name, PURPLE if button.isChecked() else MUTED))
+        self.cpu_card.set_color(PURPLE)
+        self.ram_card.set_color(GREEN)
+        self.disk_card.set_color(AMBER)
+        self.proc_card.set_color("#82b7ff")
+        self.cpu_history.color = PURPLE
+        self.ram_history.color = GREEN
+        self.cpu_history.update()
+        self.ram_history.update()
+        self.top_status.setStyleSheet("")
         self.timer.setInterval(int(self.preferences.get("refresh_ms", 2500)))
         self.statusBar().showMessage("Настройки оформления сохранены и применены", 5000)
         advanced.log_event("Применены настройки оформления")
@@ -1347,7 +1385,7 @@ class ForgeWindow(QMainWindow):
             #sectionLabel {{ padding-left: 9px; padding-bottom: 5px; }}
             #navButton {{ text-align: left; padding: 0 12px; border: 1px solid transparent; border-radius: 9px; color: {MUTED}; background: transparent; font-weight: 500; }}
             #navButton:hover {{ color: {TEXT}; background: {PANEL_HOVER}; }}
-            #navButton:checked {{ color: {TEXT}; background: {PURPLE_DARK}; border: 1px solid #403960; font-weight: 700; }}
+            #navButton:checked {{ color: {TEXT}; background: {PURPLE_DARK}; border: 1px solid {PURPLE}; font-weight: 700; }}
             #systemChip {{ background: #1b1c25; border: 1px solid {BORDER}; border-radius: 10px; }}
             #greenDot {{ color: {GREEN}; font-size: 9px; }}
             #systemChip QLabel {{ font-size: 9px; font-weight: 700; color: {MUTED}; }}
