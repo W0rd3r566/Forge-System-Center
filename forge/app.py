@@ -379,11 +379,16 @@ class WallpaperHost(QWidget):
         self._soft_wallpaper = QPixmap()
         self._wallpaper_strength = 18
         self._glass_enabled = False
+        self.preferences: dict[str, Any] = {}
         self.setObjectName("root")
         self.setAutoFillBackground(False)
 
     def set_glass_enabled(self, enabled: bool) -> None:
         self._glass_enabled = bool(enabled)
+        self.update()
+
+    def set_glass_preferences(self, preferences: dict[str, Any]) -> None:
+        self.preferences = dict(preferences)
         self.update()
 
     def set_wallpaper(self, path: str, strength: int) -> None:
@@ -424,12 +429,12 @@ class WallpaperHost(QWidget):
                 Qt.AspectRatioMode.KeepAspectRatioByExpanding,
                 Qt.TransformationMode.SmoothTransformation,
             )
-            painter.setOpacity(min(0.82, max(0.20, self._wallpaper_strength / 65.0)))
+            painter.setOpacity(min(0.90, max(0.0, self._wallpaper_strength / 100.0)))
             painter.drawPixmap((self.width() - scaled.width()) // 2, (self.height() - scaled.height()) // 2, scaled)
 
         # No opaque fill here: alpha lets the desktop compositor show through.
         tint = QColor(BG)
-        tint.setAlpha(130 if not self._soft_wallpaper.isNull() else 145)
+        tint.setAlpha(max(0, min(220, int(self.preferences.get("glass_tint_alpha", 130)))))
         painter.setOpacity(1.0)
         painter.fillRect(self.rect(), tint)
 
@@ -469,9 +474,7 @@ class HistoryChart(QFrame):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         rect = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
-        glass_enabled = "/* Liquid Glass for Forge." in str(
-            getattr(self.window(), "preferences", {}).get("custom_qss", "")
-        )
+        glass_enabled = bool(getattr(self.window(), "preferences", {}).get("glass_background_enabled", False))
         chart_fill = QColor(PANEL)
         chart_border = QColor(BORDER)
         radius = 16 if glass_enabled else 11
@@ -733,6 +736,7 @@ class ForgeWindow(QMainWindow):
         shell = WallpaperHost()
         self.wallpaper_host = shell
         shell.set_wallpaper(str(self.preferences.get("wallpaper", "")), int(self.preferences.get("wallpaper_strength", 18)))
+        shell.set_glass_preferences(self.preferences)
         shell_layout = QHBoxLayout(shell)
         shell_layout.setContentsMargins(0, 0, 0, 0)
         shell_layout.setSpacing(0)
@@ -2257,6 +2261,21 @@ class ForgeWindow(QMainWindow):
             row.addWidget(title, 1)
             row.addWidget(spin)
             control_layout.addLayout(row)
+        overlay_heading = QLabel("LIQUID GLASS")
+        overlay_heading.setObjectName("sectionLabel")
+        control_layout.addWidget(overlay_heading)
+        self.glass_background_check = QCheckBox("Включить прозрачный фон окна")
+        control_layout.addWidget(self.glass_background_check)
+        glass_row = QHBoxLayout()
+        glass_title = QLabel("Плотность матового слоя")
+        glass_title.setObjectName("muted")
+        self.glass_tint_spin = QSpinBox()
+        self.glass_tint_spin.setRange(0, 220)
+        self.glass_tint_spin.setSuffix(" / 220")
+        self.glass_tint_spin.setFixedWidth(150)
+        glass_row.addWidget(glass_title, 1)
+        glass_row.addWidget(self.glass_tint_spin)
+        control_layout.addLayout(glass_row)
         overlay_heading = QLabel("МИНИ-МОНИТОР И СИСТЕМНЫЙ ТРЕЙ")
         overlay_heading.setObjectName("sectionLabel")
         control_layout.addWidget(overlay_heading)
@@ -2364,6 +2383,8 @@ class ForgeWindow(QMainWindow):
         self.overlay_opacity_spin.setValue(int(settings.get("overlay_opacity", 94)))
         self.overlay_refresh_spin.setValue(int(settings.get("overlay_refresh_ms", 1500)))
         self.close_to_tray_check.setChecked(bool(settings.get("close_to_tray", False)))
+        self.glass_background_check.setChecked(bool(settings.get("glass_background_enabled", False)))
+        self.glass_tint_spin.setValue(int(settings.get("glass_tint_alpha", 130)))
         accent = str(settings.get("accent", "#a99bff"))
         accent_index = self.accent_combo.findData(accent)
         if accent_index < 0:
@@ -2398,9 +2419,11 @@ class ForgeWindow(QMainWindow):
         key = str(self.qss_preset_combo.currentData() or "liquid_glass")
         if key == "empty":
             self.custom_qss.clear()
+            self.glass_background_check.setChecked(False)
         else:
             self.custom_qss.setPlainText(QSS_PRESETS.get(key, LIQUID_GLASS_QSS))
-        if key == "liquid_glass" and not self.wallpaper_path.text().strip():
+            self.glass_background_check.setChecked(key in {"liquid_glass", "acrylic"})
+        if key in {"liquid_glass", "acrylic"} and not self.wallpaper_path.text().strip():
             self.wallpaper_strength.setValue(50)
         self.apply_customization()
 
@@ -2464,6 +2487,8 @@ class ForgeWindow(QMainWindow):
                 self.alert_disk_spin.setValue(int(value))
             elif key == "alert_temperature_threshold":
                 self.alert_temperature_spin.setValue(int(value))
+            elif key == "overlay_enabled":
+                self.overlay_enabled_check.setChecked(bool(value))
             elif key == "overlay_opacity":
                 self.overlay_opacity_spin.setValue(int(value))
             elif key == "overlay_refresh_ms":
@@ -2570,6 +2595,8 @@ class ForgeWindow(QMainWindow):
             "overlay_opacity": self.overlay_opacity_spin.value(),
             "overlay_refresh_ms": self.overlay_refresh_spin.value(),
             "close_to_tray": self.close_to_tray_check.isChecked(),
+            "glass_background_enabled": self.glass_background_check.isChecked(),
+            "glass_tint_alpha": self.glass_tint_spin.value(),
             "refresh_ms": self.refresh_spin.value(),
             "history_points": self.history_spin.value(),
             "wallpaper": self.wallpaper_path.text().strip(),
@@ -2584,6 +2611,7 @@ class ForgeWindow(QMainWindow):
         apply_palette(self.preferences)
         self.sidebar.setFixedWidth(SIDEBAR_WIDTH)
         self.wallpaper_host.set_wallpaper(str(self.preferences.get("wallpaper", "")), int(self.preferences.get("wallpaper_strength", 18)))
+        self.wallpaper_host.set_glass_preferences(self.preferences)
         self.mini_monitor.set_preferences(self.preferences)
         app = QApplication.instance()
         if app is not None:
@@ -2626,7 +2654,7 @@ class ForgeWindow(QMainWindow):
         self.refresh_change_journal()
 
     def _apply_theme(self) -> None:
-        glass_enabled = "/* Liquid Glass for Forge." in str(self.preferences.get("custom_qss", ""))
+        glass_enabled = bool(self.preferences.get("glass_background_enabled", False))
         self.wallpaper_host.set_glass_enabled(glass_enabled)
         window_background = "transparent" if glass_enabled else BG
         base_style = f"""
