@@ -1,18 +1,25 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
   <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#b7aaff"/>
-      <stop offset="1" stop-color="#8270df"/>
+    <linearGradient id="surface" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#c3b8ff"/>
+      <stop offset="0.52" stop-color="#a496f6"/>
+      <stop offset="1" stop-color="#7968d8"/>
     </linearGradient>
-    <linearGradient id="shine" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#ffffff" stop-opacity=".22"/>
-      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    <linearGradient id="edge" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity=".42"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity=".05"/>
     </linearGradient>
+    <filter id="softShadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="3" stdDeviation="3" flood-color="#352867" flood-opacity=".24"/>
+    </filter>
   </defs>
-  <rect x="4" y="4" width="120" height="120" rx="31" fill="#0f1016"/>
-  <rect x="9" y="9" width="110" height="110" rx="27" fill="url(#bg)"/>
-  <rect x="9" y="9" width="110" height="55" rx="27" fill="url(#shine)"/>
-  <path d="M79 35H49c-7 0-11 4-11 11v45" fill="none" stroke="#171522" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M40 58h34" fill="none" stroke="#171522" stroke-width="10" stroke-linecap="round"/>
-  <path d="M74 74l11 11 20-23" fill="none" stroke="#f6f4ff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="3.5" y="3.5" width="121" height="121" rx="32" fill="#111019" stroke="#6f629d" stroke-opacity=".72"/>
+  <rect x="9" y="9" width="110" height="110" rx="27" fill="url(#surface)"/>
+  <path d="M36 35 Q36 31 41 31 H77 V44 H52 V53 H72 V65 H52 V91 H36 Z" fill="#211c37"/>
+  <path d="M36 35 Q36 31 41 31 H77 V44 H52 V53 H72 V65 H52 V91 H36 Z" fill="none" stroke="url(#edge)" stroke-width="1"/>
+  <g filter="url(#softShadow)">
+    <rect x="70" y="68" width="39" height="39" rx="13" fill="#33294f" stroke="#c3b8ff" stroke-width="1.6"/>
+    <path d="M79 87.5 85.5 94 100 78" fill="none" stroke="#f7f5ff" stroke-width="5.3" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  <path d="M87 22 l2.6 5.4 5.4 2.6-5.4 2.6-2.6 5.4-2.6-5.4-5.4-2.6 5.4-2.6z" fill="#eeeaff" opacity=".78"/>
 </svg>
