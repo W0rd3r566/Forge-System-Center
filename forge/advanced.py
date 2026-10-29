@@ -51,6 +51,8 @@ def default_preferences() -> dict[str, Any]:
         "overlay_opacity": 94,
         "overlay_refresh_ms": 1500,
         "close_to_tray": False,
+        "glass_background_enabled": False,
+        "glass_tint_alpha": 130,
     }
 
 
@@ -80,9 +82,10 @@ def load_preferences() -> dict[str, Any]:
         settings["alert_temperature_threshold"] = max(60, min(110, int(settings["alert_temperature_threshold"])))
         settings["overlay_opacity"] = max(40, min(100, int(settings["overlay_opacity"])))
         settings["overlay_refresh_ms"] = max(500, min(10000, int(settings["overlay_refresh_ms"])))
+        settings["glass_tint_alpha"] = max(0, min(220, int(settings["glass_tint_alpha"])))
     except (ValueError, TypeError):
         defaults = default_preferences()
-        for key in ("font_size", "sidebar_width", "wallpaper_strength", "refresh_ms", "history_points", "corner_radius", "alert_cpu_threshold", "alert_memory_threshold", "alert_disk_threshold", "alert_temperature_threshold", "overlay_opacity", "overlay_refresh_ms"):
+        for key in ("font_size", "sidebar_width", "wallpaper_strength", "refresh_ms", "history_points", "corner_radius", "alert_cpu_threshold", "alert_memory_threshold", "alert_disk_threshold", "alert_temperature_threshold", "overlay_opacity", "overlay_refresh_ms", "glass_tint_alpha"):
             settings[key] = defaults[key]
     if not isinstance(settings["custom_font"], str) or not settings["custom_font"].strip():
         settings["custom_font"] = "Inter"
@@ -91,7 +94,7 @@ def load_preferences() -> dict[str, Any]:
         settings["density"] = "comfortable"
     if settings["active_profile"] not in {"balanced", "gaming", "work", "quiet"}:
         settings["active_profile"] = "balanced"
-    for key in ("alerts_enabled", "overlay_enabled", "close_to_tray"):
+    for key in ("alerts_enabled", "overlay_enabled", "close_to_tray", "glass_background_enabled"):
         settings[key] = bool(settings.get(key, defaults[key]))
     if not isinstance(settings["wallpaper"], str):
         settings["wallpaper"] = ""
