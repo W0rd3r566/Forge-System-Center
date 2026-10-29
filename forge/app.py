@@ -1946,9 +1946,10 @@ class ForgeWindow(QMainWindow):
     def _apply_theme(self) -> None:
         glass_enabled = "/* Liquid Glass for Forge." in str(self.preferences.get("custom_qss", ""))
         self.wallpaper_host.set_glass_enabled(glass_enabled)
+        window_background = "transparent" if glass_enabled else BG
         base_style = f"""
             QWidget {{ background: transparent; color: {TEXT}; font-family: 'Inter', 'Noto Sans', 'Segoe UI', sans-serif; font-size: {FONT_SIZE}px; }}
-            QMainWindow {{ background: {"transparent" if glass_enabled else BG}; }}
+            QMainWindow {{ background: {window_background}; }}
             #sidebar {{ background: {SIDEBAR}; border-right: 1px solid {BORDER}; }}
             #logoMark {{ background: transparent; }}
             #brandName {{ font-size: 17px; font-weight: 800; letter-spacing: 2px; color: {TEXT}; }}
