@@ -2086,8 +2086,22 @@ class ForgeWindow(QMainWindow):
 
     def _page_appearance(self) -> None:
         page, layout = self._scroll_page()
-        layout.addWidget(Heading("Внешний вид", "Персонализируй тему, фон, плотность интерфейса и собственные правила QSS."))
-        appearance, appearance_layout = self._card("Основные настройки", "Настройки хранятся локально в профиле пользователя.")
+        layout.addWidget(Heading("Внешний вид", "Настрой почти каждый аспект интерфейса: палитру, шрифты, плотность, скругления, обои и собственный QSS."))
+
+        mode_card, mode_layout = self._card("Режим работы", "Режимы меняют частоту мониторинга, размер истории и поведение предупреждений без автоматического завершения процессов.")
+        mode_row = QHBoxLayout()
+        self.profile_mode_combo = QComboBox()
+        for key in ("balanced", "gaming", "work", "quiet"):
+            self.profile_mode_combo.addItem(features.PROFILE_LABELS[key], key)
+        self.profile_mode_combo.setMinimumWidth(220)
+        apply_mode = self._button("Применить режим", "primary", "check")
+        apply_mode.clicked.connect(self.apply_profile_mode)
+        mode_row.addWidget(self.profile_mode_combo, 1)
+        mode_row.addWidget(apply_mode)
+        mode_layout.addLayout(mode_row)
+        layout.addWidget(mode_card)
+
+        appearance, appearance_layout = self._card("Внешний вид", "Настройки хранятся локально. Профили можно экспортировать, а QSS импортировать и экспортировать.")
         self.theme_combo = QComboBox()
         for label, value in (("Graphite · графитовый", "graphite"), ("Midnight · полуночный", "midnight"), ("Emerald · изумрудный", "emerald"), ("Light · светлый", "light")):
             self.theme_combo.addItem(label, value)
@@ -2096,11 +2110,15 @@ class ForgeWindow(QMainWindow):
         for label, value in ACCENT_OPTIONS.items():
             self.accent_combo.addItem(label, value)
         self.accent_combo.setFixedWidth(220)
+        self.accent_color_button = self._button("Выбрать цвет…")
+        self.accent_color_button.clicked.connect(self.choose_custom_accent)
+        self.font_combo = QFontComboBox()
+        self.font_combo.setMinimumWidth(220)
         self.font_spin = QSpinBox()
-        self.font_spin.setRange(10, 17)
+        self.font_spin.setRange(10, 24)
         self.font_spin.setSuffix(" px")
         self.sidebar_spin = QSpinBox()
-        self.sidebar_spin.setRange(190, 310)
+        self.sidebar_spin.setRange(190, 360)
         self.sidebar_spin.setSuffix(" px")
         self.refresh_spin = QSpinBox()
         self.refresh_spin.setRange(1000, 10000)
@@ -2109,7 +2127,14 @@ class ForgeWindow(QMainWindow):
         self.history_spin = QSpinBox()
         self.history_spin.setRange(30, 360)
         self.history_spin.setSuffix(" точек")
-        for control in (self.font_spin, self.sidebar_spin, self.refresh_spin, self.history_spin):
+        self.corner_radius_spin = QSpinBox()
+        self.corner_radius_spin.setRange(4, 28)
+        self.corner_radius_spin.setSuffix(" px")
+        self.density_combo = QComboBox()
+        for label, key in (("Компактная", "compact"), ("Обычная", "comfortable"), ("Свободная", "spacious")):
+            self.density_combo.addItem(label, key)
+        self.density_combo.setFixedWidth(150)
+        for control in (self.font_spin, self.sidebar_spin, self.refresh_spin, self.history_spin, self.corner_radius_spin):
             control.setFixedWidth(150)
         self.wallpaper_path = QLineEdit()
         self.wallpaper_path.setReadOnly(True)
@@ -2117,7 +2142,7 @@ class ForgeWindow(QMainWindow):
         self.wallpaper_path.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.wallpaper_path.setPlaceholderText("Выбери локальное изображение…")
         self.wallpaper_strength = QSlider(Qt.Orientation.Horizontal)
-        self.wallpaper_strength.setRange(0, 70)
+        self.wallpaper_strength.setRange(0, 100)
         self.wallpaper_strength.setTickInterval(10)
         self.wallpaper_strength.setTickPosition(QSlider.TickPosition.TicksBelow)
         self.wallpaper_strength_label = QLabel("18%")
@@ -2128,7 +2153,18 @@ class ForgeWindow(QMainWindow):
         self.wallpaper_clear = self._button("Убрать обои")
         self.wallpaper_clear.setMinimumWidth(112)
         self.wallpaper_clear.clicked.connect(lambda: self.wallpaper_path.clear())
-        for label, control in (("Тема", self.theme_combo), ("Акцентный цвет", self.accent_combo), ("Размер текста", self.font_spin), ("Ширина бокового меню", self.sidebar_spin), ("Частота обновления", self.refresh_spin), ("Длина истории графиков", self.history_spin)):
+        settings_controls = [
+            ("Тема", self.theme_combo),
+            ("Акцентный цвет", self.accent_combo),
+            ("Шрифт", self.font_combo),
+            ("Размер текста", self.font_spin),
+            ("Ширина бокового меню", self.sidebar_spin),
+            ("Скругление карточек", self.corner_radius_spin),
+            ("Плотность интерфейса", self.density_combo),
+            ("Частота обновления", self.refresh_spin),
+            ("Длина истории графиков", self.history_spin),
+        ]
+        for label, control in settings_controls:
             row = QHBoxLayout()
             row.setContentsMargins(0, 2, 0, 2)
             row.setSpacing(14)
@@ -2138,6 +2174,10 @@ class ForgeWindow(QMainWindow):
             row.addWidget(name, 1)
             row.addWidget(control, 0, Qt.AlignmentFlag.AlignRight)
             appearance_layout.addLayout(row)
+        accent_actions = QHBoxLayout()
+        accent_actions.addStretch(1)
+        accent_actions.addWidget(self.accent_color_button)
+        appearance_layout.addLayout(accent_actions)
         wallpaper_row = QHBoxLayout()
         wallpaper_row.setSpacing(8)
         wallpaper_row.addWidget(self.wallpaper_path, 1)
@@ -2153,7 +2193,55 @@ class ForgeWindow(QMainWindow):
         appearance_layout.addLayout(strength_row)
         layout.addWidget(appearance)
 
-        profile, profile_layout = self._card("Профили оформления", "Экспортируй настройки в JSON или перенеси их на другой компьютер. Пути к обоям должны существовать на целевом устройстве.")
+        control_card, control_layout = self._card(
+            "Мониторинг и предупреждения",
+            "Пороги настраиваются под твой компьютер. Уведомления не меняют настройки системы и имеют интервал повторного показа."
+        )
+        self.alerts_enabled_check = QCheckBox("Включить системные предупреждения")
+        control_layout.addWidget(self.alerts_enabled_check)
+        for label, attr, minimum, maximum, suffix in (
+            ("CPU", "alert_cpu_spin", 50, 100, "%"),
+            ("Память", "alert_memory_spin", 50, 100, "%"),
+            ("Занято на диске", "alert_disk_spin", 50, 100, "%"),
+            ("Температура", "alert_temperature_spin", 60, 110, " °C"),
+        ):
+            row = QHBoxLayout()
+            title = QLabel(label)
+            title.setObjectName("muted")
+            spin = QSpinBox()
+            spin.setRange(minimum, maximum)
+            spin.setSuffix(suffix)
+            spin.setFixedWidth(150)
+            setattr(self, attr, spin)
+            row.addWidget(title, 1)
+            row.addWidget(spin)
+            control_layout.addLayout(row)
+        overlay_heading = QLabel("МИНИ-МОНИТОР И СИСТЕМНЫЙ ТРЕЙ")
+        overlay_heading.setObjectName("sectionLabel")
+        control_layout.addWidget(overlay_heading)
+        self.overlay_enabled_check = QCheckBox("Показывать плавающий мини-монитор")
+        self.close_to_tray_check = QCheckBox("При закрытии сворачивать Forge в трей")
+        control_layout.addWidget(self.overlay_enabled_check)
+        control_layout.addWidget(self.close_to_tray_check)
+        for label, attr, minimum, maximum, suffix, step in (
+            ("Прозрачность мини-монитора", "overlay_opacity_spin", 40, 100, "%", 2),
+            ("Частота обновления мини-монитора", "overlay_refresh_spin", 500, 10000, " мс", 500),
+        ):
+            row = QHBoxLayout()
+            title = QLabel(label)
+            title.setObjectName("muted")
+            spin = QSpinBox()
+            spin.setRange(minimum, maximum)
+            spin.setSuffix(suffix)
+            spin.setSingleStep(step)
+            spin.setFixedWidth(150)
+            setattr(self, attr, spin)
+            row.addWidget(title, 1)
+            row.addWidget(spin)
+            control_layout.addLayout(row)
+        layout.addWidget(control_card)
+
+        profile, profile_layout = self._card("Профили настроек (JSON)", "Экспортируй или переноси параметры включая QSS. Путь к обоям должен существовать и на другом компьютере.")
         profile_buttons = QHBoxLayout()
         export_profile = self._button("Экспортировать профиль…")
         export_profile.clicked.connect(self.export_preferences)
@@ -2168,19 +2256,22 @@ class ForgeWindow(QMainWindow):
         css, css_layout = self._card("Пользовательский стиль (QSS)", "Это Qt Style Sheets, а не браузерный CSS: backdrop-filter не поддерживается. Для эффекта Liquid Glass выбери локальные обои и выставь интенсивность примерно 35–55%.")
         self.custom_qss = QPlainTextEdit()
         self.custom_qss.setObjectName("customQssEditor")
-        self.custom_qss.setMinimumHeight(230)
-        self.custom_qss.setPlaceholderText("/* Пример: скруглить карточки */\n#panel { border-radius: 18px; }\n#navButton:checked { border: 1px solid #a99bff; }\nQPushButton { padding: 9px 14px; }")
+        self.custom_qss.setMinimumHeight(300)
+        self.custom_qss.setPlaceholderText("/* Пример: скруглить карточки */\n#panel { border-radius: 18px; }\n#navButton:checked { border: 1px solid #a99bff; }\nQPushButton { padding: 9px 14px; }\n\nСправочник селекторов: docs/CUSTOMIZATION.md")
         css_layout.addWidget(self.custom_qss)
         css_buttons = QHBoxLayout()
-        liquid_css = self._button("Применить Liquid Glass")
+        liquid_css = self._button("Liquid Glass")
         liquid_css.clicked.connect(self.apply_liquid_glass_preset)
-        reset_css = self._button("Очистить пользовательские стили")
+        import_style = self._button("Импорт QSS…")
+        import_style.clicked.connect(self.import_qss)
+        export_style = self._button("Экспорт QSS…")
+        export_style.clicked.connect(self.export_qss)
+        reset_css = self._button("Очистить")
         reset_css.clicked.connect(lambda: self.custom_qss.clear())
         apply_css = self._button("Сохранить и применить", "primary", "check")
         apply_css.clicked.connect(self.apply_customization)
-        css_buttons.addWidget(liquid_css)
-        css_buttons.addWidget(reset_css)
-        css_buttons.addWidget(apply_css)
+        for button in (liquid_css, import_style, export_style, reset_css, apply_css):
+            css_buttons.addWidget(button)
         css_buttons.addStretch(1)
         css_layout.addLayout(css_buttons)
         layout.addWidget(css)
@@ -2198,9 +2289,30 @@ class ForgeWindow(QMainWindow):
         accent_index = self.accent_combo.findData(settings.get("accent", "#a99bff"))
         self.accent_combo.setCurrentIndex(max(0, accent_index))
         self.font_spin.setValue(int(settings.get("font_size", 13)))
+        self.font_combo.setCurrentFont(QFont(str(settings.get("custom_font", "Inter"))))
         self.sidebar_spin.setValue(int(settings.get("sidebar_width", 238)))
+        self.corner_radius_spin.setValue(int(settings.get("corner_radius", 12)))
+        density_index = self.density_combo.findData(settings.get("density", "comfortable"))
+        self.density_combo.setCurrentIndex(max(0, density_index))
+        profile_index = self.profile_mode_combo.findData(settings.get("active_profile", "balanced"))
+        self.profile_mode_combo.setCurrentIndex(max(0, profile_index))
         self.refresh_spin.setValue(int(settings.get("refresh_ms", 2500)))
         self.history_spin.setValue(int(settings.get("history_points", 120)))
+        self.alerts_enabled_check.setChecked(bool(settings.get("alerts_enabled", True)))
+        self.alert_cpu_spin.setValue(int(settings.get("alert_cpu_threshold", 90)))
+        self.alert_memory_spin.setValue(int(settings.get("alert_memory_threshold", 90)))
+        self.alert_disk_spin.setValue(int(settings.get("alert_disk_threshold", 95)))
+        self.alert_temperature_spin.setValue(int(settings.get("alert_temperature_threshold", 90)))
+        self.overlay_enabled_check.setChecked(bool(settings.get("overlay_enabled", False)))
+        self.overlay_opacity_spin.setValue(int(settings.get("overlay_opacity", 94)))
+        self.overlay_refresh_spin.setValue(int(settings.get("overlay_refresh_ms", 1500)))
+        self.close_to_tray_check.setChecked(bool(settings.get("close_to_tray", False)))
+        accent = str(settings.get("accent", "#a99bff"))
+        accent_index = self.accent_combo.findData(accent)
+        if accent_index < 0:
+            self.accent_combo.addItem(f"Пользовательский · {accent}", accent)
+            accent_index = self.accent_combo.findData(accent)
+        self.accent_combo.setCurrentIndex(max(0, accent_index))
         self.wallpaper_path.setText(str(settings.get("wallpaper", "")))
         self.wallpaper_strength.setValue(int(settings.get("wallpaper_strength", 18)))
         self.custom_qss.setPlainText(str(settings.get("custom_qss", "")))
@@ -2213,6 +2325,17 @@ class ForgeWindow(QMainWindow):
                 QMessageBox.warning(self, "Не удалось открыть изображение", "Выбери поддерживаемое изображение PNG, JPEG, WebP, BMP или GIF.")
                 return
             self.wallpaper_path.setText(path)
+
+    def choose_custom_accent(self) -> None:
+        color = QColorDialog.getColor(QColor(str(self.accent_combo.currentData() or PURPLE)), self, "Выбрать акцентный цвет")
+        if not color.isValid():
+            return
+        value = color.name(QColor.NameFormat.HexRgb)
+        index = self.accent_combo.findData(value)
+        if index < 0:
+            self.accent_combo.addItem(f"Пользовательский · {value}", value)
+            index = self.accent_combo.findData(value)
+        self.accent_combo.setCurrentIndex(index)
 
     def apply_liquid_glass_preset(self) -> None:
         """Load and apply the bundled translucent Qt stylesheet."""
@@ -2232,6 +2355,53 @@ class ForgeWindow(QMainWindow):
             self.accent_combo.addItem(f"Пользовательский · {value}", value)
             index = self.accent_combo.findData(value)
         self.accent_combo.setCurrentIndex(index)
+
+    def export_qss(self) -> None:
+        path, _ = QFileDialog.getSaveFileName(self, "Экспортировать стиль Forge", "forge-theme.qss", "Qt Style Sheets (*.qss);;CSS text (*.css)")
+        if not path:
+            return
+        try:
+            Path(path).write_text(self.custom_qss.toPlainText(), encoding="utf-8")
+            self.statusBar().showMessage(f"Стиль экспортирован: {path}", 5000)
+        except OSError as exc:
+            QMessageBox.warning(self, "Ошибка экспорта QSS", str(exc))
+
+    def import_qss(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(self, "Импортировать стиль Forge", str(Path.home()), "Qt Style Sheets (*.qss *.css);;Все файлы (*)")
+        if not path:
+            return
+        try:
+            content = Path(path).read_text(encoding="utf-8")
+            if len(content) > 30000:
+                raise ValueError("Файл QSS больше лимита 30 000 символов.")
+            self.custom_qss.setPlainText(content)
+            self.statusBar().showMessage("Стиль загружен. Нажми «Сохранить и применить».", 6000)
+        except (OSError, ValueError) as exc:
+            QMessageBox.warning(self, "Не удалось импортировать QSS", str(exc))
+
+    def apply_profile_mode(self) -> None:
+        name = str(self.profile_mode_combo.currentData() or "balanced")
+        preset = features.PROFILE_PRESETS.get(name, features.PROFILE_PRESETS["balanced"])
+        for key, value in preset.items():
+            if key == "refresh_ms":
+                self.refresh_spin.setValue(int(value))
+            elif key == "history_points":
+                self.history_spin.setValue(int(value))
+            elif key == "alerts_enabled":
+                self.alerts_enabled_check.setChecked(bool(value))
+            elif key == "alert_cpu_threshold":
+                self.alert_cpu_spin.setValue(int(value))
+            elif key == "alert_memory_threshold":
+                self.alert_memory_spin.setValue(int(value))
+            elif key == "alert_disk_threshold":
+                self.alert_disk_spin.setValue(int(value))
+            elif key == "alert_temperature_threshold":
+                self.alert_temperature_spin.setValue(int(value))
+            elif key == "overlay_opacity":
+                self.overlay_opacity_spin.setValue(int(value))
+            elif key == "overlay_refresh_ms":
+                self.overlay_refresh_spin.setValue(int(value))
+        self.apply_customization()
 
     def export_qss(self) -> None:
         path, _ = QFileDialog.getSaveFileName(self, "Экспортировать стиль Forge", "forge-theme.qss", "Qt Style Sheets (*.qss);;CSS text (*.css)")
