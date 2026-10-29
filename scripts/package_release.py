@@ -55,6 +55,7 @@ def install_readme(platform_name: str) -> str:
         ])
     elif platform_name.startswith("macOS"):
         lines.extend([
+            "Requires macOS 14 or newer.",
             "Extract the ZIP archive and move ForgeSystemCenter.app to Applications.",
             "This build is unsigned; macOS may show a Gatekeeper warning.",
         ])
