@@ -2,11 +2,32 @@
 
 ## Tabler Icons
 
-Forge uses locally embedded outline SVG paths in a style based on [Tabler Icons](https://github.com/tabler/tabler-icons).
+Forge embeds outline SVG path data from [Tabler Icons](https://github.com/tabler/tabler-icons), an icon set by Paweł Kuna and contributors.
 
-- Project: Tabler Icons
-- Copyright: Paweł Kuna and contributors
-- License: MIT
-- Source: https://github.com/tabler/tabler-icons/blob/main/LICENSE
+Source: https://github.com/tabler/tabler-icons
+License: MIT
+License file: https://github.com/tabler/tabler-icons/blob/main/LICENSE
 
-The Tabler Icons MIT license permits use, modification, and distribution, provided the copyright and permission notice are included. The original project is not affiliated with or endorsing Forge.
+The original Tabler Icons project is not affiliated with or endorsing Forge.
+
+### MIT License
+
+Copyright (c) 2020-2026 Paweł Kuna
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
