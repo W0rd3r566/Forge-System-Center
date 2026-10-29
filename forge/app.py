@@ -183,7 +183,7 @@ class ForgeWindow(QMainWindow):
         self._disk_history: list[float] = []
         self._process_cache: list[dict[str, Any]] = []
         self._service_cache: list[dict[str, str]] = []
-_startup_cache: list[dict[str, str | bool]] = []
+        self._startup_cache: list[dict[str, str | bool]] = []
         self._scan_path: str | None = None
         self._workers: list[Worker] = []
         self._build_ui()
