@@ -65,26 +65,15 @@ def record_change(action: str, details: str, undo: dict[str, Any] | None = None)
         "undo": undo,
         "undone": False,
     }
-    existing = read_change_records(limit=500)
+    # read_change_records returns newest first; write records chronologically.
+    existing = list(reversed(read_change_records(limit=499)))
     existing.append(record)
     temporary = path.with_suffix(".tmp")
     with temporary.open("w", encoding="utf-8") as stream:
         for item in existing[-500:]:
             stream.write(json.dumps(item, ensure_ascii=False) + "\\n")
-        stream.write(json.dumps(record, ensure_ascii=False) + "\\n")
-    # read_change_records returns an empty list when the file does not exist.
-    # Keep one copy of the new entry if the previous file was already available.
-    if existing and existing[-1].get("id") == record["id"]:
-        # The record above has already been appended to existing; avoid a duplicate
-        # by regenerating the tail without the final duplicate line.
-        rows = existing[-500:]
-        rows = rows[:-1] + [record]
-        with temporary.open("w", encoding="utf-8") as stream:
-            for item in rows:
-                stream.write(json.dumps(item, ensure_ascii=False) + "\\n")
     temporary.replace(path)
     return record
-
 
 def read_change_records(limit: int = 200) -> list[dict[str, Any]]:
     path = _journal_path()
