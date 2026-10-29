@@ -8,8 +8,8 @@ import time
 from pathlib import Path
 from typing import Any
 
-from PySide6.QtCore import QByteArray, QPointF, Qt, QTimer, QSize, QRectF
-from PySide6.QtGui import QBrush, QColor, QFont, QIcon, QKeySequence, QPainter, QPixmap, QPainterPath, QPen, QRadialGradient, QShortcut
+from PySide6.QtCore import QByteArray, QPointF, Qt, QTimer, QSize, QRectF, QThread, Signal
+from PySide6.QtGui import QAction, QBrush, QColor, QFont, QIcon, QKeySequence, QPainter, QPixmap, QPainterPath, QPen, QRadialGradient, QShortcut
 from PySide6.QtSvg import QSvgRenderer
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QFrame, QLabel, QPushButton,
@@ -17,10 +17,11 @@ from PySide6.QtWidgets import (
     QHBoxLayout, QGridLayout, QTableWidget, QTableWidgetItem, QHeaderView,
     QMessageBox, QFileDialog, QProgressBar, QSizePolicy, QAbstractItemView,
     QSplitter, QScrollArea, QPlainTextEdit, QSpinBox, QSlider,
-    QDialog, QListWidget, QListWidgetItem,
+    QDialog, QListWidget, QListWidgetItem, QCheckBox, QColorDialog, QFontComboBox,
+    QMenu, QSystemTrayIcon,
 )
 
-from . import __version__, advanced, system
+from . import __version__, advanced, features, system
 
 APP_ROOT = Path(__file__).resolve().parent.parent
 BG = "#111218"
@@ -190,12 +191,17 @@ QToolTip {
 """
 
 FONT_SIZE = 13
+FONT_FAMILY = "Inter"
 SIDEBAR_WIDTH = 238
+CORNER_RADIUS = 12
+DENSITY = "comfortable"
+UI_GAP = 9
+NAV_HEIGHT = 43
 
 
 def apply_palette(settings: dict[str, Any]) -> None:
     global BG, SIDEBAR, PANEL, PANEL_HOVER, BORDER, TEXT, MUTED, SOFT
-    global PURPLE, PURPLE_DARK, GREEN, AMBER, RED, FONT_SIZE, SIDEBAR_WIDTH
+    global PURPLE, PURPLE_DARK, GREEN, AMBER, RED, FONT_SIZE, FONT_FAMILY, SIDEBAR_WIDTH, CORNER_RADIUS, DENSITY, UI_GAP, NAV_HEIGHT
     palette = THEME_PALETTES.get(str(settings.get("theme", "graphite")), THEME_PALETTES["graphite"])
     BG = palette["BG"]
     SIDEBAR = palette["SIDEBAR"]
@@ -210,8 +216,14 @@ def apply_palette(settings: dict[str, Any]) -> None:
     RED = palette["RED"]
     PURPLE = str(settings.get("accent", "#a99bff"))
     PURPLE_DARK = palette["PURPLE_DARK"]
-    FONT_SIZE = max(10, min(17, int(settings.get("font_size", 13))))
-    SIDEBAR_WIDTH = max(190, min(310, int(settings.get("sidebar_width", 238))))
+    FONT_SIZE = max(10, min(24, int(settings.get("font_size", 13))))
+    FONT_FAMILY = str(settings.get("custom_font", "Inter"))[:100] or "Inter"
+    SIDEBAR_WIDTH = max(190, min(360, int(settings.get("sidebar_width", 238))))
+    CORNER_RADIUS = max(4, min(28, int(settings.get("corner_radius", 12))))
+    DENSITY = str(settings.get("density", "comfortable"))
+    UI_GAP, NAV_HEIGHT = {
+        "compact": (6, 36), "comfortable": (9, 43), "spacious": (14, 50)
+    }.get(DENSITY, (9, 43))
 
 # Tabler-style outline icons, rendered locally. No network or icon-font dependency.
 ICON_PATHS = {
@@ -517,6 +529,114 @@ class CommandPalette(QDialog):
         self.accept()
 
 
+
+class MiniMonitorWindow(QWidget):
+    """Draggable, always-on-top monitor for CPU, memory and disk."""
+
+    def __init__(self, preferences: dict[str, Any] | None = None) -> None:
+        super().__init__(None, Qt.WindowType.Tool | Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint)
+        self.preferences = dict(preferences or {})
+        self.setObjectName("miniMonitorWindow")
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        self.setWindowTitle("Forge Mini Monitor")
+        self.setWindowIcon(QIcon(str(APP_ROOT / "assets" / "forge.svg")))
+        self.setFixedSize(292, 172)
+        self._drag_offset: Any = None
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(10, 10, 10, 10)
+        card = QFrame()
+        card.setObjectName("miniMonitorCard")
+        card_layout = QVBoxLayout(card)
+        card_layout.setContentsMargins(14, 10, 14, 12)
+        card_layout.setSpacing(8)
+        header = QHBoxLayout()
+        title = QLabel("FORGE  /  LIVE")
+        title.setObjectName("miniMonitorTitle")
+        header.addWidget(title)
+        header.addStretch(1)
+        close_button = QPushButton("×")
+        close_button.setObjectName("miniMonitorClose")
+        close_button.setFixedSize(24, 24)
+        close_button.clicked.connect(self.hide)
+        header.addWidget(close_button)
+        card_layout.addLayout(header)
+        self.readout = QLabel("CPU     -- %\nRAM     -- %\nDISK    -- %")
+        self.readout.setObjectName("miniMonitorReadout")
+        card_layout.addWidget(self.readout)
+        self.footer = QLabel("Данные обновляются локально")
+        self.footer.setObjectName("miniMonitorFooter")
+        card_layout.addWidget(self.footer)
+        layout.addWidget(card)
+
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(self.refresh_snapshot)
+        self.set_preferences(self.preferences)
+        self.refresh_snapshot()
+
+    def set_preferences(self, preferences: dict[str, Any]) -> None:
+        self.preferences = dict(preferences)
+        self.setWindowOpacity(max(0.4, min(1.0, int(self.preferences.get("overlay_opacity", 94)) / 100.0)))
+        self.timer.setInterval(max(500, min(10000, int(self.preferences.get("overlay_refresh_ms", 1500)))))
+        if self.preferences.get("overlay_enabled", False):
+            self.show()
+            self.timer.start()
+        else:
+            self.timer.stop()
+            self.hide()
+
+    def refresh_snapshot(self) -> None:
+        try:
+            data = system.get_system_snapshot()
+            self.readout.setText(
+                f"CPU     {data['cpu']:5.1f}%\n"
+                f"RAM     {data['memory_percent']:5.1f}%\n"
+                f"DISK    {data['disk_percent']:5.1f}%"
+            )
+            self.footer.setText(f"{data['process_count']} процессов  ·  {data['uptime']}")
+        except Exception as exc:
+            self.footer.setText(f"Нет данных: {str(exc)[:48]}")
+
+    def showEvent(self, event: Any) -> None:
+        super().showEvent(event)
+        if not self.timer.isActive():
+            self.timer.start()
+
+    def hideEvent(self, event: Any) -> None:
+        self.timer.stop()
+        super().hideEvent(event)
+
+    def mousePressEvent(self, event: Any) -> None:
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._drag_offset = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event: Any) -> None:
+        if self._drag_offset is not None and event.buttons() & Qt.MouseButton.LeftButton:
+            self.move(event.globalPosition().toPoint() - self._drag_offset)
+            event.accept()
+            return
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event: Any) -> None:
+        self._drag_offset = None
+        super().mouseReleaseEvent(event)
+
+
+class NetworkDiagnosticsWorker(QThread):
+    results_ready = Signal(object)
+
+    def run(self) -> None:
+        try:
+            self.results_ready.emit(features.run_network_diagnostics())
+        except Exception as exc:
+            self.results_ready.emit([{
+                "level": "WARN", "title": "Ошибка диагностики", "detail": str(exc)
+            }])
+
+
 class ForgeWindow(QMainWindow):
     NAV = [
         ("Обзор", "overview", "Обзор"),
@@ -545,12 +665,21 @@ class ForgeWindow(QMainWindow):
         self.process_rows: list[dict[str, Any]] = []
         self._network_previous: dict[str, Any] | None = None
         self._last_alert_signature = ""
+        self._last_alert_sent = 0.0
+        self._last_temperature_check = 0.0
+        self._suspend_change_journal = False
+        self._allow_exit = False
+        self.tray_icon: QSystemTrayIcon | None = None
+        self.network_worker: NetworkDiagnosticsWorker | None = None
         self.service_rows: list[dict[str, Any]] = []
         self.startup_rows: list[dict[str, Any]] = []
         self._last_history_record = 0.0
         self._history_record_interval = 15.0
         self._build_ui()
+        self.mini_monitor = MiniMonitorWindow(self.preferences)
+        self._setup_tray()
         self._apply_theme()
+        self.mini_monitor.set_preferences(self.preferences)
         self.refresh_dashboard()
         self.refresh_processes()
         self.timer = QTimer(self)
@@ -573,7 +702,7 @@ class ForgeWindow(QMainWindow):
         self.sidebar = sidebar
         side = QVBoxLayout(sidebar)
         side.setContentsMargins(18, 22, 18, 18)
-        side.setSpacing(7)
+        side.setSpacing(UI_GAP)
 
         brand = QHBoxLayout()
         brand.setSpacing(11)
@@ -609,7 +738,7 @@ class ForgeWindow(QMainWindow):
             button.setIconSize(QSize(19, 19))
             button.setCheckable(True)
             button.setCursor(Qt.CursorShape.PointingHandCursor)
-            button.setMinimumHeight(43)
+            button.setMinimumHeight(NAV_HEIGHT)
             button.clicked.connect(lambda checked=False, page=key: self.navigate(page))
             self.nav_buttons[key] = button
             side.addWidget(button)
@@ -650,6 +779,9 @@ class ForgeWindow(QMainWindow):
         self.breadcrumb.setObjectName("breadcrumb")
         top.addWidget(self.breadcrumb)
         top.addStretch(1)
+        self.mini_button = self._button("Мини-монитор", icon_name="cpu")
+        self.mini_button.clicked.connect(self.toggle_mini_monitor)
+        top.addWidget(self.mini_button)
         self.command_button = self._button("Команды · Ctrl+K", icon_name="search")
         self.command_button.clicked.connect(self.show_command_palette)
         top.addWidget(self.command_button)
@@ -694,7 +826,7 @@ class ForgeWindow(QMainWindow):
         inner.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         layout = QVBoxLayout(inner)
         layout.setContentsMargins(0, 0, 4, 0)
-        layout.setSpacing(16)
+        layout.setSpacing(UI_GAP + 4)
         scroll.setWidget(inner)
         return scroll, layout
 
@@ -702,8 +834,9 @@ class ForgeWindow(QMainWindow):
         frame = QFrame()
         frame.setObjectName("panel")
         layout = QVBoxLayout(frame)
-        layout.setContentsMargins(18, 17, 18, 17)
-        layout.setSpacing(10)
+        padding = 14 if DENSITY == "compact" else 18 if DENSITY == "comfortable" else 24
+        layout.setContentsMargins(padding, padding - 1, padding, padding - 1)
+        layout.setSpacing(UI_GAP)
         label = QLabel(title)
         label.setObjectName("panelTitle")
         layout.addWidget(label)
@@ -722,6 +855,75 @@ class ForgeWindow(QMainWindow):
         if icon_name:
             button.setIcon(icon(icon_name, "#ffffff" if kind == "primary" else PURPLE))
         return button
+
+
+    def _setup_tray(self) -> None:
+        if not QSystemTrayIcon.isSystemTrayAvailable():
+            self.tray_icon = None
+            return
+        tray = QSystemTrayIcon(self.windowIcon(), self)
+        tray.setToolTip("Forge System Center")
+        menu = QMenu(self)
+        open_action = menu.addAction("Открыть Forge")
+        open_action.triggered.connect(self.show_main_window)
+        overlay_action = menu.addAction("Показать / скрыть мини-монитор")
+        overlay_action.triggered.connect(self.toggle_mini_monitor)
+        menu.addSeparator()
+        quit_action = menu.addAction("Выход из Forge")
+        quit_action.triggered.connect(self.exit_application)
+        tray.setContextMenu(menu)
+        tray.activated.connect(self._tray_activated)
+        tray.show()
+        self.tray_icon = tray
+
+    def _tray_activated(self, reason: QSystemTrayIcon.ActivationReason) -> None:
+        if reason == QSystemTrayIcon.ActivationReason.Trigger:
+            self.show_main_window()
+
+    def show_main_window(self) -> None:
+        self.showNormal()
+        self.raise_()
+        self.activateWindow()
+
+    def toggle_mini_monitor(self) -> None:
+        if self.mini_monitor.isVisible():
+            self.mini_monitor.hide()
+            self.preferences["overlay_enabled"] = False
+        else:
+            self.preferences["overlay_enabled"] = True
+            self.mini_monitor.set_preferences(self.preferences)
+            self.mini_monitor.show()
+            screen = QApplication.primaryScreen()
+            if screen is not None and self.mini_monitor.pos().isNull():
+                area = screen.availableGeometry()
+                self.mini_monitor.move(area.right() - self.mini_monitor.width() - 28, area.top() + 72)
+        advanced.save_preferences(self.preferences)
+        if hasattr(self, "overlay_enabled_check"):
+            self.overlay_enabled_check.setChecked(bool(self.preferences["overlay_enabled"]))
+
+    def exit_application(self) -> None:
+        self._allow_exit = True
+        self.mini_monitor.close()
+        if self.tray_icon is not None:
+            self.tray_icon.hide()
+        self.close()
+
+    def closeEvent(self, event: Any) -> None:
+        if (
+            not self._allow_exit
+            and self.preferences.get("close_to_tray", False)
+            and self.tray_icon is not None
+            and self.tray_icon.isVisible()
+        ):
+            self.hide()
+            event.ignore()
+            if self.preferences.get("overlay_enabled", False):
+                self.mini_monitor.show()
+            return
+        self.mini_monitor.close()
+        if self.tray_icon is not None:
+            self.tray_icon.hide()
+        event.accept()
 
     def _page_overview(self) -> None:
         page, layout = self._scroll_page()
@@ -1948,7 +2150,7 @@ class ForgeWindow(QMainWindow):
         self.wallpaper_host.set_glass_enabled(glass_enabled)
         window_background = "transparent" if glass_enabled else BG
         base_style = f"""
-            QWidget {{ background: transparent; color: {TEXT}; font-family: 'Inter', 'Noto Sans', 'Segoe UI', sans-serif; font-size: {FONT_SIZE}px; }}
+            QWidget {{ background: transparent; color: {TEXT}; font-family: '{FONT_FAMILY}', 'Noto Sans', 'Segoe UI', sans-serif; font-size: {FONT_SIZE}px; }}
             QMainWindow {{ background: {window_background}; }}
             #sidebar {{ background: {SIDEBAR}; border-right: 1px solid {BORDER}; }}
             #logoMark {{ background: transparent; }}
@@ -1966,11 +2168,11 @@ class ForgeWindow(QMainWindow):
             #statusTag {{ color: {GREEN}; background: #1c2b27; border: 1px solid #2c4940; padding: 7px 10px; border-radius: 7px; font-size: 10px; font-weight: 700; }}
             #pageTitle {{ font-size: 25px; font-weight: 750; color: {TEXT}; }}
             #pageSubtitle {{ font-size: 12px; color: {MUTED}; }}
-            #hero {{ background: qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 {PURPLE_DARK},stop:0.55 {PANEL},stop:1 {SIDEBAR}); border: 1px solid {BORDER}; border-radius: 14px; }}
+            #hero {{ background: qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 {PURPLE_DARK},stop:0.55 {PANEL},stop:1 {SIDEBAR}); border: 1px solid {BORDER}; border-radius: {CORNER_RADIUS + 4}px; }}
             #heroOverline {{ color: {PURPLE}; font-size: 9px; font-weight: 800; letter-spacing: 1.5px; }}
             #heroTitle {{ font-size: 25px; font-weight: 750; }}
             #heroSubtitle {{ color: #b9b5d0; font-size: 12px; }}
-            #metricCard, #panel {{ background: {PANEL}; border: 1px solid {BORDER}; border-radius: 12px; }}
+            #metricCard, #panel {{ background: {PANEL}; border: 1px solid {BORDER}; border-radius: {CORNER_RADIUS}px; }}
             #panelTitle {{ font-size: 14px; font-weight: 700; color: {TEXT}; }}
             #muted {{ color: {MUTED}; font-size: 12px; }}
             #mutedSmall {{ color: {SOFT}; font-size: 10px; }}
@@ -1983,11 +2185,11 @@ class ForgeWindow(QMainWindow):
             #quickButton:hover {{ background: {PANEL_HOVER}; border-color: #4a4568; }}
             #primaryButton {{ color: #111018; background: {PURPLE}; border: 1px solid {PURPLE}; border-radius: 8px; padding: 0 14px; font-weight: 700; }}
             #primaryButton:hover {{ background: #b9adff; }}
-            #secondaryButton {{ color: {TEXT}; background: #22232d; border: 1px solid #353643; border-radius: 8px; padding: 0 13px; }}
+            #secondaryButton {{ color: {TEXT}; background: #22232d; border: 1px solid #353643; border-radius: {max(4, CORNER_RADIUS - 3)}px; padding: 0 13px; }}
             #secondaryButton:hover {{ background: #2a2b37; border-color: #514b70; }}
             #dangerButton {{ color: #ffdce2; background: #3a2029; border: 1px solid #60313e; border-radius: 8px; padding: 0 13px; }}
             #dangerButton:hover {{ background: #49252f; }}
-            QLineEdit, QComboBox, QSpinBox {{ background: {PANEL}; color: {TEXT}; border: 1px solid {BORDER}; border-radius: 8px; selection-background-color: {PURPLE_DARK}; min-height: 18px; }}
+            QLineEdit, QComboBox, QSpinBox {{ background: {PANEL}; color: {TEXT}; border: 1px solid {BORDER}; border-radius: {max(4, CORNER_RADIUS - 3)}px; selection-background-color: {PURPLE_DARK}; min-height: 18px; }}
             QLineEdit {{ padding: 8px 10px; }}
             QComboBox {{ padding: 0 28px 0 10px; }}
             QSpinBox {{ padding: 0 22px 0 10px; }}
@@ -2012,6 +2214,13 @@ class ForgeWindow(QMainWindow):
             QScrollBar::add-line, QScrollBar::sub-line {{ width: 0; height: 0; border: 0; }}
             QStatusBar {{ background: {SIDEBAR}; color: {MUTED}; border-top: 1px solid {BORDER}; font-size: 10px; }}
             QMessageBox, QDialog {{ background: {PANEL}; }}
+            #miniMonitorWindow {{ background: transparent; }}
+            #miniMonitorCard {{ background: rgba(25, 26, 42, 218); border: 1px solid rgba(195, 182, 255, 145); border-top: 1px solid rgba(255, 250, 255, 220); border-radius: 16px; }}
+            #miniMonitorTitle {{ color: {PURPLE}; font-size: 10px; font-weight: 800; letter-spacing: 1.3px; background: transparent; }}
+            #miniMonitorReadout {{ color: {TEXT}; font-family: 'JetBrains Mono', 'Consolas', monospace; font-size: 13px; background: transparent; }}
+            #miniMonitorFooter {{ color: {MUTED}; font-size: 9px; background: transparent; }}
+            #miniMonitorClose {{ color: {MUTED}; background: rgba(255,255,255,15); border: 1px solid rgba(215,205,255,70); border-radius: 8px; }}
+            #miniMonitorClose:hover {{ color: {TEXT}; background: rgba(169,155,255,70); }}
             QListWidget {{ background: {PANEL}; color: {TEXT}; border: 1px solid {BORDER}; border-radius: 9px; outline: 0; }}
             QListWidget::item {{ padding: 9px 10px; border-radius: 6px; }}
             QListWidget::item:selected {{ background: {PURPLE_DARK}; color: {TEXT}; border: 1px solid {PURPLE}; }}
