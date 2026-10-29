@@ -790,8 +790,8 @@ class ForgeWindow(QMainWindow):
 
     def _apply_theme(self) -> None:
         self.setStyleSheet(f"""
-            QWidget {{ background: {BG}; color: {TEXT}; font-family: 'Inter', 'Noto Sans', 'Segoe UI', sans-serif; font-size: 13px; }}
-            QMainWindow {{ background: {BG}; }}
+            QWidget {{ background: transparent; color: {TEXT}; font-family: 'Inter', 'Noto Sans', 'Segoe UI', sans-serif; font-size: 13px; }}
+            QMainWindow, QWidget#root {{ background: {BG}; }}
             #sidebar {{ background: {SIDEBAR}; border-right: 1px solid {BORDER}; }}
             #logoMark {{ background: transparent; }}
             #brandName {{ font-size: 17px; font-weight: 800; letter-spacing: 2px; color: {TEXT}; }}
