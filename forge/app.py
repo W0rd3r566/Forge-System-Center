@@ -1,13 +1,15 @@
 from __future__ import annotations
 
+import csv
 import json
 import platform
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
 from PySide6.QtCore import QByteArray, Qt, QTimer, QSize, QRectF
-from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPixmap, QPainterPath, QPen
+from PySide6.QtGui import QColor, QFont, QIcon, QKeySequence, QPainter, QPixmap, QPainterPath, QPen, QShortcut
 from PySide6.QtSvg import QSvgRenderer
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QFrame, QLabel, QPushButton,
@@ -15,6 +17,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout, QGridLayout, QTableWidget, QTableWidgetItem, QHeaderView,
     QMessageBox, QFileDialog, QProgressBar, QSizePolicy, QAbstractItemView,
     QSplitter, QScrollArea, QPlainTextEdit, QSpinBox, QSlider,
+    QDialog, QListWidget, QListWidgetItem,
 )
 
 from . import __version__, advanced, system
@@ -255,12 +258,71 @@ class HistoryChart(QFrame):
         painter.end()
 
 
+class CommandPalette(QDialog):
+    """Searchable command list opened with Ctrl+K."""
+
+    def __init__(self, commands: list[tuple[str, str]], parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.commands = commands
+        self.selected_command = ""
+        self.setWindowTitle("Команды Forge")
+        self.setModal(True)
+        self.setMinimumWidth(560)
+        self.setMinimumHeight(360)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setSpacing(10)
+        title = QLabel("Быстрые команды")
+        title.setObjectName("panelTitle")
+        layout.addWidget(title)
+        self.search = QLineEdit()
+        self.search.setPlaceholderText("Введи название раздела или действия…")
+        self.search.setClearButtonEnabled(True)
+        layout.addWidget(self.search)
+        self.command_list = QListWidget()
+        self.command_list.setMinimumHeight(250)
+        self.command_list.setSpacing(3)
+        layout.addWidget(self.command_list)
+        hint = QLabel("Enter · выполнить    Esc · закрыть")
+        hint.setObjectName("mutedSmall")
+        layout.addWidget(hint)
+        self.search.textChanged.connect(self.filter_commands)
+        self.search.returnPressed.connect(self.activate_current)
+        self.command_list.itemActivated.connect(self.activate_item)
+        self.filter_commands("")
+        self.search.setFocus()
+
+    def filter_commands(self, query: str) -> None:
+        needle = query.casefold().strip()
+        self.command_list.clear()
+        for label, command in self.commands:
+            if needle and needle not in label.casefold():
+                continue
+            item = QListWidgetItem(label)
+            item.setData(Qt.ItemDataRole.UserRole, command)
+            self.command_list.addItem(item)
+        if self.command_list.count():
+            self.command_list.setCurrentRow(0)
+
+    def activate_current(self) -> None:
+        item = self.command_list.currentItem()
+        if item is not None:
+            self.selected_command = str(item.data(Qt.ItemDataRole.UserRole) or "")
+            self.accept()
+
+    def activate_item(self, item: QListWidgetItem) -> None:
+        self.selected_command = str(item.data(Qt.ItemDataRole.UserRole) or "")
+        self.accept()
+
+
 class ForgeWindow(QMainWindow):
     NAV = [
         ("Обзор", "overview", "Обзор"),
         ("Процессы", "process", "Процессы"),
         ("Накопители", "disk", "Накопители"),
+        ("Оборудование", "cpu", "Оборудование"),
         ("Мониторинг", "cpu", "Мониторинг"),
+        ("История", "refresh", "История"),
         ("Сеть", "network", "Сеть"),
         ("Службы", "services", "Службы"),
         ("Автозапуск", "startup", "Автозапуск"),
@@ -282,6 +344,8 @@ class ForgeWindow(QMainWindow):
         self._last_alert_signature = ""
         self.service_rows: list[dict[str, Any]] = []
         self.startup_rows: list[dict[str, Any]] = []
+        self._last_history_record = 0.0
+        self._history_record_interval = 15.0
         self._build_ui()
         self._apply_theme()
         self.refresh_dashboard()
@@ -383,6 +447,9 @@ class ForgeWindow(QMainWindow):
         self.breadcrumb.setObjectName("breadcrumb")
         top.addWidget(self.breadcrumb)
         top.addStretch(1)
+        self.command_button = self._button("Команды · Ctrl+K", icon_name="search")
+        self.command_button.clicked.connect(self.show_command_palette)
+        top.addWidget(self.command_button)
         self.top_status = QLabel("●  СИСТЕМА ДОСТУПНА")
         self.top_status.setObjectName("statusTag")
         top.addWidget(self.top_status)
@@ -395,6 +462,8 @@ class ForgeWindow(QMainWindow):
         shell_layout.addWidget(sidebar)
         shell_layout.addWidget(main, 1)
         self.setCentralWidget(shell)
+        self.command_shortcut = QShortcut(QKeySequence("Ctrl+K"), self)
+        self.command_shortcut.activated.connect(self.show_command_palette)
 
         self._page_overview()
         self._page_processes()
@@ -402,7 +471,9 @@ class ForgeWindow(QMainWindow):
         self._page_services()
         self._page_startup()
         self._page_cleanup()
+        self._page_hardware()
         self._page_monitoring()
+        self._page_history()
         self._page_network()
         self._page_diagnostics()
         self._page_appearance()
@@ -713,6 +784,10 @@ class ForgeWindow(QMainWindow):
             self.refresh_startup()
         elif page == "Очистка":
             self.refresh_cache_info()
+        elif page == "Оборудование":
+            self.refresh_hardware()
+        elif page == "История":
+            self.refresh_history()
         elif page == "Мониторинг":
             self.refresh_sensors()
         elif page == "Сеть":
@@ -737,6 +812,24 @@ class ForgeWindow(QMainWindow):
             if hasattr(self, "cpu_history"):
                 self.cpu_history.add_value(data["cpu"])
                 self.ram_history.add_value(data["memory_percent"])
+            history_now = time.monotonic()
+            if history_now - self._last_history_record >= self._history_record_interval:
+                gpu_percent = None
+                try:
+                    gpu_data = advanced.get_sensor_snapshot().get("gpu")
+                    if gpu_data:
+                        gpu_percent = gpu_data.get("utilization")
+                except Exception:
+                    pass
+                advanced.record_performance_sample({
+                    "cpu": data["cpu"],
+                    "memory": data["memory_percent"],
+                    "disk": data["disk_percent"],
+                    "gpu": gpu_percent,
+                })
+                self._last_history_record = history_now
+                if self.stack.currentWidget() == self.pages.get("История"):
+                    self.refresh_history()
             if self.stack.currentWidget() == self.pages.get("Сеть"):
                 self.refresh_network()
             if self.stack.currentWidget() == self.pages.get("Мониторинг"):
@@ -998,6 +1091,230 @@ class ForgeWindow(QMainWindow):
         layout.addStretch(1)
         self.pages["Мониторинг"] = page
         self.stack.addWidget(page)
+
+    def _page_hardware(self) -> None:
+        page, layout = self._scroll_page()
+        refresh = self._button("Обновить сведения", icon_name="refresh")
+        refresh.clicked.connect(self.refresh_hardware)
+        layout.addWidget(Heading("Оборудование", "Процессор, память, графика, питание и датчики, которые действительно доступны операционной системе.", refresh))
+
+        cards = QGridLayout()
+        cards.setSpacing(12)
+        self.hardware_cpu_card = MetricCard("ЗАГРУЗКА CPU", "cpu", PURPLE)
+        self.hardware_memory_card = MetricCard("ОПЕРАТИВНАЯ ПАМЯТЬ", "memory", GREEN)
+        self.hardware_swap_card = MetricCard("ФАЙЛ ПОДКАЧКИ / SWAP", "disk", AMBER)
+        cards.addWidget(self.hardware_cpu_card, 0, 0)
+        cards.addWidget(self.hardware_memory_card, 0, 1)
+        cards.addWidget(self.hardware_swap_card, 0, 2)
+        layout.addLayout(cards)
+
+        details, details_layout = self._card("Сведения об устройстве", "Показания зависят от драйверов, прошивки и возможностей ОС. Недоступные данные отмечаются явно.")
+        self.hardware_table = self._table(["КОМПОНЕНТ", "СВЕДЕНИЯ"])
+        self.hardware_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        self.hardware_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        self.hardware_table.setMinimumHeight(300)
+        details_layout.addWidget(self.hardware_table)
+        layout.addWidget(details)
+
+        sensor_frame, sensor_layout = self._card("Датчики и состояние", "Forge не запрашивает повышенные права для чтения датчиков.")
+        self.hardware_sensor_summary = QLabel("Данные появятся после обновления.")
+        self.hardware_sensor_summary.setObjectName("muted")
+        self.hardware_sensor_summary.setWordWrap(True)
+        sensor_layout.addWidget(self.hardware_sensor_summary)
+        layout.addWidget(sensor_frame)
+        layout.addStretch(1)
+        self.pages["Оборудование"] = page
+        self.stack.addWidget(page)
+        self.refresh_hardware()
+
+    def refresh_hardware(self) -> None:
+        if not hasattr(self, "hardware_table"):
+            return
+        try:
+            data = advanced.get_hardware_snapshot()
+            cpu_load = float(data.get("cpu_percent", 0.0))
+            memory_percent = float(data.get("memory_percent", 0.0))
+            swap_percent = float(data.get("swap_percent", 0.0))
+            self.hardware_cpu_card.update_value(f"{cpu_load:.0f}%", f"{data['cpu_name']} · {data['logical_cores']} логических потоков", cpu_load)
+            self.hardware_memory_card.update_value(fmt_bytes(data["memory_used"]), f"{memory_percent:.0f}% занято из {fmt_bytes(data['memory_total'])}", memory_percent)
+            self.hardware_swap_card.update_value(fmt_bytes(data["swap_used"]), f"{swap_percent:.0f}% занято из {fmt_bytes(data['swap_total'])}", swap_percent)
+
+            frequency = data.get("frequency_mhz")
+            frequency_text = f"{frequency / 1000:.2f} ГГц" if frequency else "Не предоставляется"
+            gpu = data.get("gpu")
+            if gpu:
+                gpu_parts = [str(gpu.get("name") or "GPU")]
+                if gpu.get("utilization") is not None:
+                    gpu_parts.append(f"загрузка {float(gpu['utilization']):.0f}%")
+                if gpu.get("temperature") is not None:
+                    gpu_parts.append(f"{float(gpu['temperature']):.0f} °C")
+                if gpu.get("memory_used_mb") is not None and gpu.get("memory_total_mb"):
+                    gpu_parts.append(f"VRAM {float(gpu['memory_used_mb']):.0f}/{float(gpu['memory_total_mb']):.0f} MiB")
+                gpu_text = " · ".join(gpu_parts)
+            else:
+                gpu_text = "Название или датчики GPU недоступны"
+            battery = data.get("battery")
+            battery_text = (f"{battery.get('percent', 0):.0f}% · " + ("зарядка" if battery.get("plugged") else "от батареи")) if battery else "Нет батарейного датчика"
+            active = data.get("active_interfaces", [])
+            network_text = ", ".join(str(item.get("name", "")) for item in active[:8]) or "Активные интерфейсы не обнаружены"
+            temperatures = data.get("temperatures", [])
+            temperature_text = " · ".join(
+                f"{item['sensor']}: {float(item['celsius']):.1f} °C"
+                for item in sorted(temperatures, key=lambda item: float(item.get("celsius", -999)), reverse=True)[:8]
+            ) or "Температурные датчики не предоставлены"
+
+            rows = [
+                ("Процессор", data["cpu_name"]),
+                ("Физические ядра / потоки", f"{data['physical_cores']} / {data['logical_cores']}"),
+                ("Текущая частота CPU", frequency_text),
+                ("Операционная система", data["os"]),
+                ("Архитектура", data["architecture"]),
+                ("Время работы", data["uptime"]),
+                ("Графика", gpu_text),
+                ("Батарея", battery_text),
+                ("Активные сетевые интерфейсы", network_text),
+                ("Подключённые диски", str(data.get("disk_count", 0))),
+            ]
+            self.hardware_table.setSortingEnabled(False)
+            self.hardware_table.setRowCount(len(rows))
+            for index, (name, value) in enumerate(rows):
+                self.hardware_table.setItem(index, 0, QTableWidgetItem(name))
+                self.hardware_table.setItem(index, 1, QTableWidgetItem(value))
+            self.hardware_table.setSortingEnabled(True)
+            fans = data.get("fans", [])
+            fan_text = " · ".join(f"{item['sensor']}: {item['rpm']} RPM" for item in fans[:8]) or "Датчики вентиляторов не предоставлены"
+            self.hardware_sensor_summary.setText(f"Температуры: {temperature_text}\nВентиляторы: {fan_text}")
+        except Exception as exc:
+            self.statusBar().showMessage(f"Не удалось получить сведения об оборудовании: {exc}", 6000)
+
+    def _page_history(self) -> None:
+        page, layout = self._scroll_page()
+        layout.addWidget(Heading("История производительности", "Локальная история CPU, памяти, диска и доступной NVIDIA GPU. Запись выполняется примерно раз в 15 секунд; данные не отправляются в сеть."))
+        actions = QHBoxLayout()
+        refresh = self._button("Обновить историю", icon_name="refresh")
+        refresh.clicked.connect(self.refresh_history)
+        export = self._button("Экспорт CSV…", "primary", "folder")
+        export.clicked.connect(self.export_performance_history)
+        clear = self._button("Очистить историю…", "danger", "cleanup")
+        clear.clicked.connect(self.clear_performance_history)
+        actions.addWidget(refresh)
+        actions.addWidget(export)
+        actions.addWidget(clear)
+        actions.addStretch(1)
+        layout.addLayout(actions)
+        self.history_summary = QLabel("История пока не собрана.")
+        self.history_summary.setObjectName("muted")
+        self.history_summary.setWordWrap(True)
+        layout.addWidget(self.history_summary)
+
+        charts = QGridLayout()
+        charts.setSpacing(12)
+        points = int(self.preferences.get("history_points", 120))
+        self.history_cpu_chart = HistoryChart("CPU", PURPLE, points)
+        self.history_memory_chart = HistoryChart("Оперативная память", GREEN, points)
+        self.history_disk_chart = HistoryChart("Занятое место на системном диске", AMBER, points)
+        self.history_gpu_chart = HistoryChart("NVIDIA GPU · если доступно", "#82b7ff", points)
+        charts.addWidget(self.history_cpu_chart, 0, 0)
+        charts.addWidget(self.history_memory_chart, 0, 1)
+        charts.addWidget(self.history_disk_chart, 1, 0)
+        charts.addWidget(self.history_gpu_chart, 1, 1)
+        layout.addLayout(charts)
+        layout.addStretch(1)
+        self.pages["История"] = page
+        self.stack.addWidget(page)
+        self.refresh_history()
+
+    def refresh_history(self) -> None:
+        if not hasattr(self, "history_cpu_chart"):
+            return
+        limit = int(self.preferences.get("history_points", 120))
+        samples = advanced.read_performance_history(limit=limit)
+        for chart, field in (
+            (self.history_cpu_chart, "cpu"),
+            (self.history_memory_chart, "memory"),
+            (self.history_disk_chart, "disk"),
+            (self.history_gpu_chart, "gpu"),
+        ):
+            chart.points = limit
+            chart.values = [sample.get(field) for sample in samples]
+            chart.update()
+        if not samples:
+            self.history_summary.setText("История пока пуста. Forge начнёт записывать первую точку автоматически; данные останутся в профиле пользователя.")
+            return
+        oldest = samples[0]["time"].replace("T", " ")
+        newest = samples[-1]["time"].replace("T", " ")
+        self.history_summary.setText(
+            f"Точек на графиках: {len(samples)} · период: {oldest} — {newest} · "
+            "интервал записи около 15 секунд. GPU может отсутствовать, если драйвер не предоставляет данные."
+        )
+
+    def export_performance_history(self) -> None:
+        path, _ = QFileDialog.getSaveFileName(self, "Экспорт истории Forge", "forge-performance.csv", "CSV (*.csv)")
+        if not path:
+            return
+        samples = advanced.read_performance_history(limit=50000)
+        try:
+            with Path(path).open("w", encoding="utf-8-sig", newline="") as stream:
+                writer = csv.DictWriter(stream, fieldnames=["time", "cpu", "memory", "disk", "gpu"])
+                writer.writeheader()
+                writer.writerows(samples)
+            advanced.log_event(f"Экспортирована история производительности: {len(samples)} точек")
+            QMessageBox.information(self, "Экспорт завершён", f"Сохранено записей: {len(samples)}.")
+        except OSError as exc:
+            QMessageBox.warning(self, "Не удалось экспортировать историю", str(exc))
+
+    def clear_performance_history(self) -> None:
+        answer = QMessageBox.question(self, "Очистить историю?", "Удалить локальную историю производительности Forge? Это действие нельзя отменить.")
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            advanced.clear_performance_history()
+            self.refresh_history()
+            advanced.log_event("Очищена история производительности")
+            self.statusBar().showMessage("Локальная история производительности очищена", 5000)
+        except OSError as exc:
+            QMessageBox.warning(self, "Не удалось очистить историю", str(exc))
+
+    def show_command_palette(self) -> None:
+        commands = [
+            ("Открыть обзор системы", "page:Обзор"),
+            ("Открыть управление процессами", "page:Процессы"),
+            ("Открыть накопители", "page:Накопители"),
+            ("Открыть центр оборудования", "page:Оборудование"),
+            ("Открыть мониторинг датчиков", "page:Мониторинг"),
+            ("Открыть историю производительности", "page:История"),
+            ("Открыть сетевой центр", "page:Сеть"),
+            ("Открыть службы", "page:Службы"),
+            ("Открыть автозапуск", "page:Автозапуск"),
+            ("Открыть очистку кэша", "page:Очистка"),
+            ("Открыть диагностику", "page:Диагностика"),
+            ("Открыть внешний вид и настройки", "page:Внешний вид"),
+            ("Обновить системные показатели", "action:refresh"),
+            ("Обновить сведения об оборудовании", "action:hardware"),
+            ("Обновить датчики", "action:sensors"),
+            ("Обновить диагностику", "action:diagnostics"),
+            ("Обновить журнал событий", "action:events"),
+            ("Экспортировать историю в CSV", "action:export_history"),
+        ]
+        dialog = CommandPalette(commands, self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            self._execute_command(dialog.selected_command)
+
+    def _execute_command(self, command: str) -> None:
+        if command.startswith("page:"):
+            self.navigate(command.partition(":")[2])
+            return
+        actions = {
+            "action:refresh": self.refresh_dashboard,
+            "action:hardware": self.refresh_hardware,
+            "action:sensors": self.refresh_sensors,
+            "action:diagnostics": self.refresh_diagnostics,
+            "action:events": self.refresh_event_log,
+            "action:export_history": self.export_performance_history,
+        }
+        action = actions.get(command)
+        if action is not None:
+            action()
 
     def refresh_sensors(self) -> None:
         if not hasattr(self, "sensor_table"):
@@ -1383,7 +1700,11 @@ class ForgeWindow(QMainWindow):
         self.cpu_history.color = PURPLE
         self.ram_history.color = GREEN
         self.gpu_history.color = "#82b7ff"
-        for chart in (self.cpu_history, self.ram_history, self.gpu_history):
+        self.history_cpu_chart.color = PURPLE
+        self.history_memory_chart.color = GREEN
+        self.history_disk_chart.color = AMBER
+        self.history_gpu_chart.color = "#82b7ff"
+        for chart in (self.cpu_history, self.ram_history, self.gpu_history, self.history_cpu_chart, self.history_memory_chart, self.history_disk_chart, self.history_gpu_chart):
             chart.points = int(self.preferences.get("history_points", 120))
             chart.values = chart.values[-chart.points:]
             chart.update()
@@ -1445,7 +1766,10 @@ class ForgeWindow(QMainWindow):
             QScrollBar::handle:vertical {{ background: #363746; border-radius: 4px; min-height: 24px; }}
             QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0; }}
             QStatusBar {{ background: {SIDEBAR}; color: {MUTED}; border-top: 1px solid {BORDER}; font-size: 10px; }}
-            QMessageBox {{ background: {PANEL}; }}
+            QMessageBox, QDialog {{ background: {PANEL}; }}
+            QListWidget {{ background: {PANEL}; color: {TEXT}; border: 1px solid {BORDER}; border-radius: 9px; outline: 0; }}
+            QListWidget::item {{ padding: 9px 10px; border-radius: 6px; }}
+            QListWidget::item:selected {{ background: {PURPLE_DARK}; color: {TEXT}; border: 1px solid {PURPLE}; }}
             QSpinBox, QPlainTextEdit {{ background: {PANEL}; color: {TEXT}; border: 1px solid {BORDER}; border-radius: 8px; padding: 8px; selection-background-color: {PURPLE_DARK}; }}
             #customQssEditor {{ font-family: 'JetBrains Mono', 'Consolas', monospace; font-size: 12px; }}
             QSlider::groove:horizontal {{ height: 5px; background: {BORDER}; border-radius: 2px; }}
