@@ -2414,8 +2414,12 @@ class ForgeWindow(QMainWindow):
             )
             return
         self.wallpaper_path.setText(path)
+        # A newly selected wallpaper should be plainly visible; the old default
+        # of 18% opacity can make a dark image look like it was not applied.
+        if self.wallpaper_strength.value() < 35:
+            self.wallpaper_strength.setValue(55)
         self.preview_wallpaper()
-        self.statusBar().showMessage("Предпросмотр обоев включён. Нажми «Сохранить и применить», чтобы сохранить выбор.", 7000)
+        self.statusBar().showMessage("Обои показаны сразу. Нажми «Сохранить и применить», чтобы сохранить выбор.", 7000)
 
     def preview_wallpaper(self, _strength: int | None = None) -> None:
         """Preview wallpaper immediately, before the user saves preferences."""
