@@ -213,6 +213,10 @@ Release: 1%{{?dist}}
 Summary: Local-first desktop system monitor and control center
 License: MIT
 BuildArch: {rpm_arch}
+Source0: ForgeSystemCenter
+Source1: forge-system-center.desktop
+Source2: forge.svg
+Source3: LICENSE
 Requires: glibc >= {glibc_min}
 {requires}
 
