@@ -1247,18 +1247,43 @@ class ForgeWindow(QMainWindow):
             if self.stack.currentWidget() == self.pages.get("Диагностика"):
                 self.refresh_diagnostics()
             warnings: list[str] = []
-            if data["cpu"] >= 90:
-                warnings.append(f"высокая загрузка CPU ({data['cpu']:.0f}%)")
-            if data["memory_percent"] >= 90:
+            cpu_limit = int(self.preferences.get("alert_cpu_threshold", 90))
+            memory_limit = int(self.preferences.get("alert_memory_threshold", 90))
+            disk_limit = int(self.preferences.get("alert_disk_threshold", 95))
+            temperature_limit = int(self.preferences.get("alert_temperature_threshold", 90))
+            if data["cpu"] >= cpu_limit:
+                warnings.append(f"высокая загрузка CPU ({data['cpu']:.0f}% ≥ {cpu_limit}%)")
+            if data["memory_percent"] >= memory_limit:
                 warnings.append(f"мало свободной памяти ({data['memory_percent']:.0f}% занято)")
-            if data["disk_percent"] >= 95:
+            if data["disk_percent"] >= disk_limit:
                 warnings.append(f"мало места на системном диске ({data['disk_percent']:.0f}% занято)")
+            now = time.monotonic()
+            if now - self._last_temperature_check >= 20:
+                self._last_temperature_check = now
+                try:
+                    sensor_data = advanced.get_sensor_snapshot()
+                    temperatures = list(sensor_data.get("temperatures", []))
+                    gpu_data = sensor_data.get("gpu")
+                    if gpu_data and gpu_data.get("temperature") is not None:
+                        temperatures.append({"sensor": "GPU", "celsius": gpu_data["temperature"]})
+                    hottest = max(temperatures, key=lambda item: float(item.get("celsius", -999)), default=None)
+                    if hottest and float(hottest.get("celsius", -999)) >= temperature_limit:
+                        warnings.append(f"температура {hottest.get('sensor', 'датчик')} {float(hottest['celsius']):.1f} °C")
+                except Exception:
+                    pass
             alert_signature = "|".join(warnings)
             if warnings:
                 self.top_status.setText("●  ЕСТЬ ПРЕДУПРЕЖДЕНИЯ")
                 self.top_status.setStyleSheet(f"color: {RED}; background: {PANEL}; border: 1px solid {RED}; padding: 7px 10px; border-radius: 7px; font-size: 10px; font-weight: 700;")
                 if alert_signature != self._last_alert_signature:
                     advanced.log_event("Системное предупреждение: " + "; ".join(warnings), "WARNING")
+                if self.preferences.get("alerts_enabled", True) and (not self._last_alert_sent or now - self._last_alert_sent >= 180.0):
+                    notice = "; ".join(warnings)
+                    if self.tray_icon is not None and self.tray_icon.isVisible():
+                        self.tray_icon.showMessage("Forge · предупреждение", notice, QSystemTrayIcon.MessageIcon.Warning, 10000)
+                    else:
+                        self.statusBar().showMessage(notice, 10000)
+                    self._last_alert_sent = now
             else:
                 self.top_status.setText("●  СИСТЕМА ДОСТУПНА")
                 self.top_status.setStyleSheet("")
@@ -1387,8 +1412,17 @@ class ForgeWindow(QMainWindow):
         if QMessageBox.question(self, "Подтверждение", f"Точно {verb} службу «{unit}»?") != QMessageBox.StandardButton.Yes:
             return
         try:
+            previous_row = next((item for item in self.service_rows if item.get("unit") == unit), {})
+            was_active = str(previous_row.get("active", "unknown")) == "active"
             result = system.service_action(unit, scope, action)
+            if action in {"start", "stop"} and was_active != (action == "start"):
+                features.record_change(
+                    "Служба systemd",
+                    f"{action}: {unit} ({scope})",
+                    {"kind": "service", "unit": str(unit), "scope": str(scope), "action": "stop" if action == "start" else "start"},
+                )
             advanced.log_event(f"Действие службы {unit}: {action} ({scope})")
+            self.refresh_change_journal()
             QMessageBox.information(self, "Готово", result)
             self.refresh_services()
         except Exception as exc:
@@ -1427,9 +1461,18 @@ class ForgeWindow(QMainWindow):
         if QMessageBox.question(self, "Изменить автозапуск", f"{'Включить' if enabled else 'Отключить'} запись?\n\n{path}") != QMessageBox.StandardButton.Yes:
             return
         try:
+            previous_enabled = not enabled
             message = system.toggle_startup(path, enabled)
+            source = Path(path)
+            current_path = source.with_name(source.name.removesuffix(".forge-disabled")) if enabled else source.with_name(source.name + ".forge-disabled")
+            features.record_change(
+                "Автозапуск",
+                f"{'Включена' if enabled else 'Отключена'} запись: {current_path.name}",
+                {"kind": "startup", "path": str(current_path), "enabled": previous_enabled},
+            )
             self.startup_status.setText(message)
             self.refresh_startup()
+            self.refresh_change_journal()
         except Exception as exc:
             QMessageBox.warning(self, "Не удалось изменить автозапуск", str(exc))
 
@@ -1699,6 +1742,9 @@ class ForgeWindow(QMainWindow):
             ("Открыть очистку кэша", "page:Очистка"),
             ("Открыть диагностику", "page:Диагностика"),
             ("Открыть внешний вид и настройки", "page:Внешний вид"),
+            ("Открыть сетевую диагностику", "page:Сеть"),
+            ("Показать / скрыть мини-монитор", "action:overlay"),
+            ("Откатить последнее изменение Forge", "action:undo"),
             ("Обновить системные показатели", "action:refresh"),
             ("Обновить сведения об оборудовании", "action:hardware"),
             ("Обновить датчики", "action:sensors"),
@@ -1721,6 +1767,9 @@ class ForgeWindow(QMainWindow):
             "action:diagnostics": self.refresh_diagnostics,
             "action:events": self.refresh_event_log,
             "action:export_history": self.export_performance_history,
+            "action:overlay": self.toggle_mini_monitor,
+            "action:undo": self.undo_last_change,
+            "action:network_diagnostics": self.run_network_diagnostics,
         }
         action = actions.get(command)
         if action is not None:
@@ -1812,9 +1861,47 @@ class ForgeWindow(QMainWindow):
         interface_layout.addWidget(self.network_note)
         layout.addWidget(interfaces)
         layout.addStretch(1)
+        diagnostics, diagnostics_layout = self._card(
+            "Сетевая лаборатория",
+            "Проверки только читают состояние сети: IP интерфейсов, DNS, разрешение github.com, внешний ICMP и маршрут. Системные настройки не меняются."
+        )
+        self.network_diag_status = QLabel("Запусти диагностику, чтобы получить результаты.")
+        self.network_diag_status.setObjectName("muted")
+        self.network_diag_status.setWordWrap(True)
+        diagnostics_layout.addWidget(self.network_diag_status)
+        self.network_diag_button = self._button("Запустить диагностику", "primary", "network")
+        self.network_diag_button.clicked.connect(self.run_network_diagnostics)
+        diagnostics_layout.addWidget(self.network_diag_button)
+        layout.addWidget(diagnostics)
         self.pages["Сеть"] = page
         self.stack.addWidget(page)
         self.refresh_network(reset=True)
+
+    def run_network_diagnostics(self) -> None:
+        if self.network_worker is not None and self.network_worker.isRunning():
+            return
+        if not hasattr(self, "network_diag_button"):
+            self.navigate("Сеть")
+            return
+        self.network_diag_button.setEnabled(False)
+        self.network_diag_status.setText("Проверяю интерфейсы, DNS и доступность узлов…")
+        worker = NetworkDiagnosticsWorker()
+        worker.results_ready.connect(self._show_network_diagnostics)
+        worker.finished.connect(lambda: self.network_diag_button.setEnabled(True))
+        self.network_worker = worker
+        worker.start()
+
+    def _show_network_diagnostics(self, checks: list[dict[str, str]]) -> None:
+        if not hasattr(self, "network_diag_status"):
+            return
+        lines = []
+        for check in checks:
+            mark = "✓" if check.get("level") == "OK" else "!" if check.get("level") == "WARN" else "i"
+            lines.append(f"{mark}  {check.get('title', 'Проверка')}\\n    {check.get('detail', '')}")
+        self.network_diag_status.setText("\\n\\n".join(lines) or "Нет результатов.")
+        features.record_change("Сетевая диагностика", f"Проверок выполнено: {len(checks)}")
+        advanced.log_event("Запущена сетевая диагностика")
+        self.refresh_change_journal()
 
     def refresh_network(self, reset: bool = False) -> None:
         if not hasattr(self, "network_table"):
@@ -1863,7 +1950,26 @@ class ForgeWindow(QMainWindow):
         self.diag_status.setWordWrap(True)
         checks_layout.addWidget(self.diag_status)
         layout.addWidget(checks)
-        events, events_layout = self._card("Журнал Forge", "Записываются отдельные действия внутри приложения. Это не замена журналу событий Windows или systemd.")
+        changes, changes_layout = self._card(
+            "Журнал изменений и откат",
+            "Forge откатывает сохранённые настройки, а также некоторые изменения пользовательского автозапуска и действия со службами. Необратимые действия остаются без кнопки отката."
+        )
+        self.change_view = QPlainTextEdit()
+        self.change_view.setReadOnly(True)
+        self.change_view.setObjectName("customQssEditor")
+        self.change_view.setMinimumHeight(160)
+        changes_layout.addWidget(self.change_view)
+        change_actions = QHBoxLayout()
+        refresh_changes = self._button("Обновить журнал")
+        refresh_changes.clicked.connect(self.refresh_change_journal)
+        undo_change = self._button("Откатить последнее изменение", "primary", "refresh")
+        undo_change.clicked.connect(self.undo_last_change)
+        change_actions.addWidget(refresh_changes)
+        change_actions.addWidget(undo_change)
+        change_actions.addStretch(1)
+        changes_layout.addLayout(change_actions)
+        layout.addWidget(changes)
+        events, events_layout = self._card("Журнал событий Forge", "Подробные сообщения приложения остаются локальными. Это не замена журналу Windows или systemd.")
         self.event_view = QPlainTextEdit()
         self.event_view.setReadOnly(True)
         self.event_view.setObjectName("customQssEditor")
@@ -1877,6 +1983,62 @@ class ForgeWindow(QMainWindow):
         self.pages["Диагностика"] = page
         self.stack.addWidget(page)
         self.refresh_diagnostics()
+        self.refresh_change_journal()
+
+    def refresh_change_journal(self) -> None:
+        if not hasattr(self, "change_view"):
+            return
+        records = features.read_change_records(80)
+        if not records:
+            self.change_view.setPlainText("Пока нет записей. Изменения настроек и обратимые действия появятся здесь.")
+            return
+        lines = []
+        for item in records:
+            state = " · ОТКАЧЕНО" if item.get("undone") else ""
+            can_undo = " · можно откатить" if isinstance(item.get("undo"), dict) and not item.get("undone") else ""
+            lines.append(f"[{item.get('time', '')}] {item.get('action', 'Изменение')}{state}{can_undo}\\n  {item.get('details', '')}")
+        self.change_view.setPlainText("\\n\\n".join(lines))
+
+    def undo_last_change(self) -> None:
+        record = features.latest_reversible_change()
+        if record is None:
+            QMessageBox.information(self, "Нет отката", "В журнале нет доступных обратимых изменений.")
+            return
+        undo = record.get("undo") or {}
+        question = (
+            f"Откатить изменение?\\n\\n{record.get('action', 'Изменение')}\\n"
+            f"{record.get('details', '')}\\n\\nForge выполнит сохранённое обратное действие. Продолжить?"
+        )
+        if QMessageBox.question(self, "Подтверждение отката", question, QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.No) != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            kind = undo.get("kind")
+            if kind == "preferences":
+                before = undo.get("before")
+                if not isinstance(before, dict):
+                    raise ValueError("В журнале нет снимка настроек.")
+                self._suspend_change_journal = True
+                advanced.save_preferences(before)
+                self.preferences = advanced.load_preferences()
+                self._sync_appearance_controls()
+                self.apply_customization()
+            elif kind == "startup":
+                system.toggle_startup(str(undo["path"]), bool(undo["enabled"]))
+                self.refresh_startup()
+            elif kind == "service":
+                system.service_action(str(undo["unit"]), str(undo["scope"]), str(undo["action"]))
+                self.refresh_services()
+            else:
+                raise ValueError("Это изменение не поддерживает автоматический откат.")
+            features.mark_change_undone(str(record["id"]), "Откат выполнен из Forge")
+            advanced.log_event(f"Откат изменения: {record.get('action', 'Изменение')}")
+            self.refresh_change_journal()
+            self.refresh_event_log()
+            self.statusBar().showMessage("Откат выполнен", 5000)
+        except Exception as exc:
+            QMessageBox.warning(self, "Откат не выполнен", str(exc))
+        finally:
+            self._suspend_change_journal = False
 
     def refresh_diagnostics(self) -> None:
         if not hasattr(self, "diag_status"):
@@ -2059,6 +2221,65 @@ class ForgeWindow(QMainWindow):
             self.wallpaper_strength.setValue(50)
         self.apply_customization()
 
+
+    def choose_custom_accent(self) -> None:
+        color = QColorDialog.getColor(QColor(str(self.accent_combo.currentData() or PURPLE)), self, "Выбрать акцентный цвет")
+        if not color.isValid():
+            return
+        value = color.name(QColor.NameFormat.HexRgb)
+        index = self.accent_combo.findData(value)
+        if index < 0:
+            self.accent_combo.addItem(f"Пользовательский · {value}", value)
+            index = self.accent_combo.findData(value)
+        self.accent_combo.setCurrentIndex(index)
+
+    def export_qss(self) -> None:
+        path, _ = QFileDialog.getSaveFileName(self, "Экспортировать стиль Forge", "forge-theme.qss", "Qt Style Sheets (*.qss);;CSS text (*.css)")
+        if not path:
+            return
+        try:
+            Path(path).write_text(self.custom_qss.toPlainText(), encoding="utf-8")
+            self.statusBar().showMessage(f"Стиль экспортирован: {path}", 5000)
+        except OSError as exc:
+            QMessageBox.warning(self, "Ошибка экспорта QSS", str(exc))
+
+    def import_qss(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(self, "Импортировать стиль Forge", str(Path.home()), "Qt Style Sheets (*.qss *.css);;Все файлы (*)")
+        if not path:
+            return
+        try:
+            content = Path(path).read_text(encoding="utf-8")
+            if len(content) > 30000:
+                raise ValueError("Файл QSS больше лимита 30 000 символов.")
+            self.custom_qss.setPlainText(content)
+            self.statusBar().showMessage("Стиль загружен. Нажми «Сохранить и применить».", 6000)
+        except (OSError, ValueError) as exc:
+            QMessageBox.warning(self, "Не удалось импортировать QSS", str(exc))
+
+    def apply_profile_mode(self) -> None:
+        name = str(self.profile_mode_combo.currentData() or "balanced")
+        preset = features.PROFILE_PRESETS.get(name, features.PROFILE_PRESETS["balanced"])
+        for key, value in preset.items():
+            if key == "refresh_ms":
+                self.refresh_spin.setValue(int(value))
+            elif key == "history_points":
+                self.history_spin.setValue(int(value))
+            elif key == "alerts_enabled":
+                self.alerts_enabled_check.setChecked(bool(value))
+            elif key == "alert_cpu_threshold":
+                self.alert_cpu_spin.setValue(int(value))
+            elif key == "alert_memory_threshold":
+                self.alert_memory_spin.setValue(int(value))
+            elif key == "alert_disk_threshold":
+                self.alert_disk_spin.setValue(int(value))
+            elif key == "alert_temperature_threshold":
+                self.alert_temperature_spin.setValue(int(value))
+            elif key == "overlay_opacity":
+                self.overlay_opacity_spin.setValue(int(value))
+            elif key == "overlay_refresh_ms":
+                self.overlay_refresh_spin.setValue(int(value))
+        self.apply_customization()
+
     def export_preferences(self) -> None:
         path, _ = QFileDialog.getSaveFileName(self, "Экспортировать профиль Forge", "forge-profile.json", "JSON (*.json)")
         if not path:
@@ -2092,12 +2313,26 @@ class ForgeWindow(QMainWindow):
             QMessageBox.warning(self, "Не удалось импортировать профиль", str(exc))
 
     def apply_customization(self) -> None:
+        previous_preferences = dict(self.preferences)
         settings = dict(self.preferences)
         settings.update({
             "theme": str(self.theme_combo.currentData() or "graphite"),
             "accent": str(self.accent_combo.currentData() or "#a99bff"),
             "font_size": self.font_spin.value(),
+            "custom_font": self.font_combo.currentFont().family(),
             "sidebar_width": self.sidebar_spin.value(),
+            "corner_radius": self.corner_radius_spin.value(),
+            "density": str(self.density_combo.currentData() or "comfortable"),
+            "active_profile": str(self.profile_mode_combo.currentData() or "balanced"),
+            "alerts_enabled": self.alerts_enabled_check.isChecked(),
+            "alert_cpu_threshold": self.alert_cpu_spin.value(),
+            "alert_memory_threshold": self.alert_memory_spin.value(),
+            "alert_disk_threshold": self.alert_disk_spin.value(),
+            "alert_temperature_threshold": self.alert_temperature_spin.value(),
+            "overlay_enabled": self.overlay_enabled_check.isChecked(),
+            "overlay_opacity": self.overlay_opacity_spin.value(),
+            "overlay_refresh_ms": self.overlay_refresh_spin.value(),
+            "close_to_tray": self.close_to_tray_check.isChecked(),
             "refresh_ms": self.refresh_spin.value(),
             "history_points": self.history_spin.value(),
             "wallpaper": self.wallpaper_path.text().strip(),
@@ -2112,9 +2347,10 @@ class ForgeWindow(QMainWindow):
         apply_palette(self.preferences)
         self.sidebar.setFixedWidth(SIDEBAR_WIDTH)
         self.wallpaper_host.set_wallpaper(str(self.preferences.get("wallpaper", "")), int(self.preferences.get("wallpaper_strength", 18)))
+        self.mini_monitor.set_preferences(self.preferences)
         app = QApplication.instance()
         if app is not None:
-            font = QFont("Inter", FONT_SIZE)
+            font = QFont(FONT_FAMILY, FONT_SIZE)
             if not font.exactMatch():
                 font = QFont("Noto Sans", FONT_SIZE)
             app.setFont(font)
@@ -2144,6 +2380,13 @@ class ForgeWindow(QMainWindow):
         self.timer.setInterval(int(self.preferences.get("refresh_ms", 2500)))
         self.statusBar().showMessage("Настройки оформления сохранены и применены", 5000)
         advanced.log_event("Применены настройки оформления")
+        if not self._suspend_change_journal and previous_preferences != self.preferences:
+            features.record_change(
+                "Настройки Forge",
+                "Изменены внешний вид, профиль мониторинга или пороги предупреждений",
+                {"kind": "preferences", "before": previous_preferences},
+            )
+        self.refresh_change_journal()
 
     def _apply_theme(self) -> None:
         glass_enabled = "/* Liquid Glass for Forge." in str(self.preferences.get("custom_qss", ""))
