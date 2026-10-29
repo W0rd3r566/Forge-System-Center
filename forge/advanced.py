@@ -259,6 +259,140 @@ def get_sensor_snapshot() -> dict[str, Any]:
     return {"temperatures": temperatures, "fans": fans, "gpu": gpu, "battery": battery_data}
 
 
+def history_path() -> Path:
+    """Return the private, per-user path used for local performance history."""
+    return data_directory() / "performance.jsonl"
+
+
+def _bounded_percent(value: Any) -> float | None:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    import math
+    if not math.isfinite(number):
+        return None
+    return round(max(0.0, min(100.0, number)), 1)
+
+
+def record_performance_sample(snapshot: dict[str, Any], recorded_at: datetime | None = None) -> bool:
+    """Append one validated CPU/memory/disk/GPU sample locally; never use the network."""
+    cpu = _bounded_percent(snapshot.get("cpu"))
+    memory = _bounded_percent(snapshot.get("memory"))
+    disk = _bounded_percent(snapshot.get("disk"))
+    if cpu is None or memory is None or disk is None:
+        return False
+    sample = {
+        "time": (recorded_at or datetime.now().astimezone()).astimezone().isoformat(timespec="seconds"),
+        "cpu": cpu,
+        "memory": memory,
+        "disk": disk,
+        "gpu": _bounded_percent(snapshot.get("gpu")),
+    }
+    path = history_path()
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as stream:
+            stream.write(json.dumps(sample, ensure_ascii=False, separators=(",", ":")) + "\n")
+        # Keep the log bounded without rewriting it on every sample.
+        if path.stat().st_size > 6 * 1024 * 1024:
+            lines = path.read_text(encoding="utf-8", errors="replace").splitlines()[-40000:]
+            temporary = path.with_suffix(".tmp")
+            temporary.write_text("\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
+            temporary.replace(path)
+        return True
+    except OSError:
+        return False
+
+
+def read_performance_history(limit: int = 360) -> list[dict[str, Any]]:
+    """Read the newest valid history rows in chronological order."""
+    path = history_path()
+    try:
+        lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return []
+    rows: list[dict[str, Any]] = []
+    for line in lines[-max(1, min(50000, int(limit))):]:
+        try:
+            payload = json.loads(line)
+        except (TypeError, ValueError):
+            continue
+        if not isinstance(payload, dict) or not isinstance(payload.get("time"), str):
+            continue
+        cpu = _bounded_percent(payload.get("cpu"))
+        memory = _bounded_percent(payload.get("memory"))
+        disk = _bounded_percent(payload.get("disk"))
+        if cpu is None or memory is None or disk is None:
+            continue
+        rows.append({"time": payload["time"], "cpu": cpu, "memory": memory, "disk": disk, "gpu": _bounded_percent(payload.get("gpu"))})
+    return rows
+
+
+def clear_performance_history() -> None:
+    """Remove local performance history only after an explicit user action."""
+    history_path().unlink(missing_ok=True)
+
+
+def get_hardware_snapshot() -> dict[str, Any]:
+    """Collect hardware facts exposed by the current OS without privileged access."""
+    from . import system
+
+    overview = system.get_system_snapshot()
+    memory = psutil.virtual_memory()
+    swap = psutil.swap_memory()
+    try:
+        frequency = psutil.cpu_freq()
+    except (AttributeError, OSError, NotImplementedError):
+        frequency = None
+
+    cpu_name = (platform.processor() or "").strip()
+    if not cpu_name and platform.system() == "Linux":
+        try:
+            for line in Path("/proc/cpuinfo").read_text(encoding="utf-8", errors="replace").splitlines():
+                key, separator, value = line.partition(":")
+                if separator and key.strip().lower() in {"model name", "hardware", "processor"} and value.strip():
+                    cpu_name = value.strip()
+                    break
+        except OSError:
+            pass
+
+    sensors = get_sensor_snapshot()
+    gpu = sensors.get("gpu")
+    if not gpu and overview.get("gpu") and overview["gpu"] != "Not detected":
+        gpu = {"name": overview["gpu"]}
+    try:
+        disks = system.list_disks()
+    except (OSError, RuntimeError):
+        disks = []
+    try:
+        interfaces = get_network_snapshot().get("interfaces", [])
+    except (OSError, RuntimeError):
+        interfaces = []
+    return {
+        "cpu_name": cpu_name or "Название процессора не предоставлено ОС",
+        "cpu_percent": float(overview.get("cpu", 0.0)),
+        "physical_cores": psutil.cpu_count(logical=False) or 0,
+        "logical_cores": psutil.cpu_count(logical=True) or 0,
+        "frequency_mhz": float(frequency.current) if frequency and frequency.current else None,
+        "memory_used": int(memory.used),
+        "memory_total": int(memory.total),
+        "memory_percent": float(memory.percent),
+        "swap_used": int(swap.used),
+        "swap_total": int(swap.total),
+        "swap_percent": float(swap.percent),
+        "gpu": gpu,
+        "temperatures": sensors.get("temperatures", []),
+        "fans": sensors.get("fans", []),
+        "battery": sensors.get("battery"),
+        "os": str(overview.get("os", f"{platform.system()} {platform.release()}")),
+        "architecture": platform.machine() or "Unknown",
+        "uptime": str(overview.get("uptime", "Unknown")),
+        "disk_count": len(disks),
+        "active_interfaces": [item for item in interfaces if item.get("is_up")],
+    }
+
+
 def create_diagnostic_report() -> dict[str, Any]:
     """Collect a local, user-requested diagnostic snapshot without uploading it."""
     from . import __version__, system
