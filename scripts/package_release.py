@@ -163,6 +163,10 @@ def package_linux(output: Path) -> None:
             "libxcb-render-util0",
             "libxcb-xkb1",
             "libxcb-util1",
+            "libxcb-image0",
+            "libxcb-xfixes0",
+            "libxcb-sync1",
+            "libxcb-shm0",
         ]
         control = (
             "Package: forge-system-center\n"
@@ -201,7 +205,10 @@ def package_linux(output: Path) -> None:
             "libxcb-icccm.so.4()(64bit)", "libxcb-keysyms.so.1()(64bit)",
             "libxcb-randr.so.0()(64bit)", "libxcb-render-util.so.0()(64bit)",
             "libxcb-shape.so.0()(64bit)", "libxcb-xinerama.so.0()(64bit)",
-            "libxcb-xkb.so.1()(64bit)", "libxkbcommon.so.0()(64bit)",
+            "libxcb-xkb.so.1()(64bit)", "libxcb-image.so.0()(64bit)",
+            "libxcb-xfixes.so.0()(64bit)", "libxcb-sync.so.1()(64bit)",
+            "libxcb-shm.so.0()(64bit)", "libxcb-util.so.1()(64bit)",
+            "libxkbcommon.so.0()(64bit)",
             "libxkbcommon-x11.so.0()(64bit)", "libX11.so.6()(64bit)",
             "libXrender.so.1()(64bit)", "libEGL.so.1()(64bit)",
             "libGL.so.1()(64bit)", "libdbus-1.so.3()(64bit)",
