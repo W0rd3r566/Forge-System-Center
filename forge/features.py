@@ -61,7 +61,7 @@ def record_change(action: str, details: str, undo: dict[str, Any] | None = None)
         "id": uuid.uuid4().hex,
         "time": datetime.now().astimezone().isoformat(timespec="seconds"),
         "action": str(action)[:100],
-        "details": str(details).replace("\\n", " ")[:1000],
+        "details": str(details).replace("\n", " ")[:1000],
         "undo": undo,
         "undone": False,
     }
@@ -71,7 +71,7 @@ def record_change(action: str, details: str, undo: dict[str, Any] | None = None)
     temporary = path.with_suffix(".tmp")
     with temporary.open("w", encoding="utf-8") as stream:
         for item in existing[-500:]:
-            stream.write(json.dumps(item, ensure_ascii=False) + "\\n")
+            stream.write(json.dumps(item, ensure_ascii=False) + "\n")
     temporary.replace(path)
     return record
 
@@ -116,7 +116,7 @@ def mark_change_undone(change_id: str, result: str) -> None:
     temporary = path.with_suffix(".tmp")
     with temporary.open("w", encoding="utf-8") as stream:
         for record in records[-500:]:
-            stream.write(json.dumps(record, ensure_ascii=False) + "\\n")
+            stream.write(json.dumps(record, ensure_ascii=False) + "\n")
     temporary.replace(path)
 
 
