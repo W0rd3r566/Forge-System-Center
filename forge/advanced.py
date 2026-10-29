@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import platform
+import re
 import subprocess
 import time
 from datetime import datetime, timezone
@@ -63,13 +64,12 @@ def load_preferences() -> dict[str, Any]:
         pass
     if not isinstance(settings["theme"], str) or settings["theme"] not in {"graphite", "midnight", "emerald", "light"}:
         settings["theme"] = "graphite"
-    accents = {"#a99bff", "#82b7ff", "#83d6b0", "#f0b7cf", "#f0c674", "#ff879d", "#65d4d0"}
-    if not isinstance(settings["accent"], str) or settings["accent"] not in accents:
+    if not isinstance(settings["accent"], str) or not re.fullmatch(r"#[0-9a-fA-F]{6}", settings["accent"]):
         settings["accent"] = "#a99bff"
     try:
-        settings["font_size"] = max(10, min(17, int(settings["font_size"])))
-        settings["sidebar_width"] = max(190, min(310, int(settings["sidebar_width"])))
-        settings["wallpaper_strength"] = max(0, min(70, int(settings["wallpaper_strength"])))
+        settings["font_size"] = max(10, min(24, int(settings["font_size"])))
+        settings["sidebar_width"] = max(190, min(360, int(settings["sidebar_width"])))
+        settings["wallpaper_strength"] = max(0, min(100, int(settings["wallpaper_strength"])))
         settings["refresh_ms"] = max(1000, min(10000, int(settings["refresh_ms"])))
         settings["history_points"] = max(30, min(360, int(settings["history_points"])))
         settings["corner_radius"] = max(4, min(28, int(settings["corner_radius"])))
