@@ -641,6 +641,7 @@ class ForgeWindow(QMainWindow):
             return
         try:
             rows = system.list_disks()
+            self.disk_table.setSortingEnabled(False)
             self.disk_table.setRowCount(len(rows))
             for i, row in enumerate(rows):
                 values = [row["mountpoint"], row["fstype"], fmt_bytes(row["used"]), fmt_bytes(row["free"]), f"{row['percent']:.0f}%"]
@@ -649,6 +650,7 @@ class ForgeWindow(QMainWindow):
                     if j >= 2:
                         item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
                     self.disk_table.setItem(i, j, item)
+            self.disk_table.setSortingEnabled(True)
         except Exception as exc:
             self.statusBar().showMessage(f"Не удалось получить диски: {exc}", 6000)
 
@@ -676,6 +678,7 @@ class ForgeWindow(QMainWindow):
         scope = "user" if self.service_scope.currentIndex() == 0 else "system"
         try:
             self.service_rows = system.list_services(scope)
+            self.service_table.setSortingEnabled(False)
             self.service_table.setRowCount(len(self.service_rows))
             for i, row in enumerate(self.service_rows):
                 values = [row["unit"], row["active"], row["load"], row["description"]]
@@ -686,6 +689,7 @@ class ForgeWindow(QMainWindow):
                     if j == 1:
                         item.setForeground(QColor(GREEN if value == "active" else AMBER if value == "activating" else MUTED))
                     self.service_table.setItem(i, j, item)
+            self.service_table.setSortingEnabled(True)
             if hasattr(self, "service_status"):
                 self.service_status.setText(f"Найдено служб: {len(self.service_rows)} · область: {'пользователь' if scope == 'user' else 'система'}")
         except Exception as exc:
@@ -716,6 +720,7 @@ class ForgeWindow(QMainWindow):
             return
         try:
             self.startup_rows = system.list_startup_apps()
+            self.startup_table.setSortingEnabled(False)
             self.startup_table.setRowCount(len(self.startup_rows))
             for i, row in enumerate(self.startup_rows):
                 values = [str(row["name"]), "Включено" if row["enabled"] else "Отключено", str(row["path"])]
@@ -726,6 +731,7 @@ class ForgeWindow(QMainWindow):
                     if j == 1:
                         item.setForeground(QColor(GREEN if row["enabled"] else AMBER))
                     self.startup_table.setItem(i, j, item)
+            self.startup_table.setSortingEnabled(True)
             self.startup_status.setText(f"Найдено записей: {len(self.startup_rows)}")
         except Exception as exc:
             self.startup_status.setText(f"Не удалось прочитать автозапуск: {exc}")
