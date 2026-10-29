@@ -1,22 +1,23 @@
 from __future__ import annotations
 
+import json
 import platform
 import sys
 from pathlib import Path
 from typing import Any
 
-from PySide6.QtCore import QByteArray, Qt, QTimer, QSize
-from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPixmap
+from PySide6.QtCore import QByteArray, Qt, QTimer, QSize, QRectF
+from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPixmap, QPainterPath, QPen
 from PySide6.QtSvg import QSvgRenderer
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QFrame, QLabel, QPushButton,
     QToolButton, QLineEdit, QComboBox, QStackedWidget, QVBoxLayout,
     QHBoxLayout, QGridLayout, QTableWidget, QTableWidgetItem, QHeaderView,
     QMessageBox, QFileDialog, QProgressBar, QSizePolicy, QAbstractItemView,
-    QSplitter, QScrollArea,
+    QSplitter, QScrollArea, QPlainTextEdit, QSpinBox, QSlider,
 )
 
-from . import __version__, system
+from . import __version__, advanced, system
 
 APP_ROOT = Path(__file__).resolve().parent.parent
 BG = "#111218"
@@ -33,8 +34,45 @@ GREEN = "#83d6b0"
 AMBER = "#e9c27a"
 RED = "#f08a9a"
 
+
+THEME_PALETTES = {
+    "graphite": {"BG": "#111218", "SIDEBAR": "#15161d", "PANEL": "#1a1b24", "PANEL_HOVER": "#22232e", "BORDER": "#2b2c38", "TEXT": "#f2f1f8", "MUTED": "#a09fb2", "SOFT": "#6f7083", "PURPLE_DARK": "#28243e", "GREEN": "#83d6b0", "AMBER": "#e9c27a", "RED": "#f08a9a"},
+    "midnight": {"BG": "#0b111c", "SIDEBAR": "#101827", "PANEL": "#141f30", "PANEL_HOVER": "#1b2b42", "BORDER": "#293a50", "TEXT": "#eef4ff", "MUTED": "#a0b0c5", "SOFT": "#71839c", "PURPLE_DARK": "#1b3048", "GREEN": "#75dcc0", "AMBER": "#f2c875", "RED": "#ff8d9e"},
+    "emerald": {"BG": "#101713", "SIDEBAR": "#141e19", "PANEL": "#1a2720", "PANEL_HOVER": "#24342b", "BORDER": "#304438", "TEXT": "#edf7ef", "MUTED": "#a5b9aa", "SOFT": "#758b7b", "PURPLE_DARK": "#203c31", "GREEN": "#83d6b0", "AMBER": "#e9c27a", "RED": "#f08a9a"},
+    "light": {"BG": "#f0f1f7", "SIDEBAR": "#e5e7f0", "PANEL": "#ffffff", "PANEL_HOVER": "#e5e4f1", "BORDER": "#d4d6e3", "TEXT": "#272635", "MUTED": "#68697d", "SOFT": "#86879a", "PURPLE_DARK": "#e7e2ff", "GREEN": "#247c5a", "AMBER": "#9a6812", "RED": "#b73351"},
+}
+ACCENT_OPTIONS = {
+    "Лавандовый": "#a99bff", "Голубой": "#82b7ff", "Мятный": "#83d6b0",
+    "Розовый": "#f0b7cf", "Янтарный": "#f0c674", "Коралловый": "#ff879d",
+    "Бирюзовый": "#65d4d0",
+}
+FONT_SIZE = 13
+SIDEBAR_WIDTH = 238
+
+
+def apply_palette(settings: dict[str, Any]) -> None:
+    global BG, SIDEBAR, PANEL, PANEL_HOVER, BORDER, TEXT, MUTED, SOFT
+    global PURPLE, PURPLE_DARK, GREEN, AMBER, RED, FONT_SIZE, SIDEBAR_WIDTH
+    palette = THEME_PALETTES.get(str(settings.get("theme", "graphite")), THEME_PALETTES["graphite"])
+    BG = palette["BG"]
+    SIDEBAR = palette["SIDEBAR"]
+    PANEL = palette["PANEL"]
+    PANEL_HOVER = palette["PANEL_HOVER"]
+    BORDER = palette["BORDER"]
+    TEXT = palette["TEXT"]
+    MUTED = palette["MUTED"]
+    SOFT = palette["SOFT"]
+    GREEN = palette["GREEN"]
+    AMBER = palette["AMBER"]
+    RED = palette["RED"]
+    PURPLE = str(settings.get("accent", "#a99bff"))
+    PURPLE_DARK = palette["PURPLE_DARK"]
+    FONT_SIZE = max(10, min(17, int(settings.get("font_size", 13))))
+    SIDEBAR_WIDTH = max(190, min(310, int(settings.get("sidebar_width", 238))))
+
 # Tabler-style outline icons, rendered locally. No network or icon-font dependency.
 ICON_PATHS = {
+    "network": '<path d="M5 6h4v4h-4z" /><path d="M15 14h4v4h-4z" /><path d="M7 10v4h10" /><path d="M17 14V9h-2" /><path d="M14 6h.01" />',
     "overview": '<path d="M5 4h4a1 1 0 0 1 1 1v6a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1v-6a1 1 0 0 1 1 -1" /><path d="M5 16h4a1 1 0 0 1 1 1v2a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1v-2a1 1 0 0 1 1 -1" /><path d="M15 12h4a1 1 0 0 1 1 1v6a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1v-6a1 1 0 0 1 1 -1" /><path d="M15 4h4a1 1 0 0 1 1 1v2a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1v-2a1 1 0 0 1 1 -1" />',
     "process": '<path d="M13 5h8" /><path d="M13 9h5" /><path d="M13 15h8" /><path d="M13 19h5" /><path d="M3 5a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v4a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1l0 -4" /><path d="M3 15a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v4a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1l0 -4" />',
     "disk": '<path d="M4 6a8 3 0 1 0 16 0a8 3 0 1 0 -16 0" /><path d="M4 6v6a8 3 0 0 0 16 0v-6" /><path d="M4 12v6a8 3 0 0 0 16 0v-6" />',
@@ -128,23 +166,106 @@ class Heading(QWidget):
             row.addWidget(action, 0, Qt.AlignmentFlag.AlignBottom)
 
 
+
+
+class WallpaperHost(QWidget):
+    """Paint a local wallpaper behind the transparent content surface."""
+    def __init__(self) -> None:
+        super().__init__()
+        self._wallpaper = QPixmap()
+        self._wallpaper_strength = 18
+        self.setObjectName("root")
+        self.setAutoFillBackground(False)
+
+    def set_wallpaper(self, path: str, strength: int) -> None:
+        candidate = Path(path).expanduser() if path else Path()
+        self._wallpaper = QPixmap(str(candidate)) if path and candidate.is_file() else QPixmap()
+        self._wallpaper_strength = max(0, min(70, int(strength)))
+        self.update()
+
+    def paintEvent(self, event: Any) -> None:
+        painter = QPainter(self)
+        painter.fillRect(self.rect(), QColor(BG))
+        if not self._wallpaper.isNull() and self._wallpaper_strength > 0 and self.width() > 0 and self.height() > 0:
+            scaled = self._wallpaper.scaled(self.size(), Qt.AspectRatioMode.KeepAspectRatioByExpanding, Qt.TransformationMode.SmoothTransformation)
+            painter.setOpacity(self._wallpaper_strength / 100.0)
+            painter.drawPixmap((self.width() - scaled.width()) // 2, (self.height() - scaled.height()) // 2, scaled)
+        painter.end()
+
+
+class HistoryChart(QFrame):
+    def __init__(self, title: str, color: str, points: int = 120) -> None:
+        super().__init__()
+        self.title = title
+        self.color = color
+        self.points = max(30, min(360, int(points)))
+        self.values: list[float] = []
+        self.setMinimumHeight(174)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.setObjectName("historyChart")
+
+    def add_value(self, value: float) -> None:
+        self.values.append(max(0.0, min(100.0, float(value))))
+        self.values = self.values[-self.points:]
+        self.update()
+
+    def paintEvent(self, event: Any) -> None:
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        rect = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
+        painter.setPen(QPen(QColor(BORDER), 1))
+        painter.setBrush(QColor(PANEL))
+        painter.drawRoundedRect(rect, 11, 11)
+        painter.setPen(QColor(TEXT))
+        painter.setFont(QFont("Inter", 10, QFont.Weight.DemiBold))
+        painter.drawText(QRectF(16, 12, self.width() - 32, 20), Qt.AlignmentFlag.AlignLeft, self.title)
+        current = f"{self.values[-1]:.0f}%" if self.values else "—"
+        painter.setPen(QColor(self.color))
+        painter.setFont(QFont("Inter", 11, QFont.Weight.Bold))
+        painter.drawText(QRectF(16, 12, self.width() - 32, 20), Qt.AlignmentFlag.AlignRight, current)
+        left, right, top, bottom = 16.0, self.width() - 16.0, 42.0, self.height() - 18.0
+        painter.setPen(QPen(QColor(BORDER), 1, Qt.PenStyle.DotLine))
+        for fraction in (0.0, 0.5, 1.0):
+            y = bottom - (bottom - top) * fraction
+            painter.drawLine(int(left), int(y), int(right), int(y))
+        if len(self.values) > 1:
+            path = QPainterPath()
+            for index, value in enumerate(self.values):
+                x = left + (right - left) * index / (len(self.values) - 1)
+                y = bottom - (bottom - top) * value / 100.0
+                if index == 0:
+                    path.moveTo(x, y)
+                else:
+                    path.lineTo(x, y)
+            painter.setPen(QPen(QColor(self.color), 2.2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+            painter.drawPath(path)
+        painter.end()
+
+
 class ForgeWindow(QMainWindow):
     NAV = [
         ("Обзор", "overview", "Обзор"),
         ("Процессы", "process", "Процессы"),
         ("Накопители", "disk", "Накопители"),
+        ("Мониторинг", "cpu", "Мониторинг"),
+        ("Сеть", "network", "Сеть"),
         ("Службы", "services", "Службы"),
         ("Автозапуск", "startup", "Автозапуск"),
         ("Очистка", "cleanup", "Очистка"),
+        ("Диагностика", "info", "Диагностика"),
+        ("Внешний вид", "settings", "Внешний вид"),
     ]
 
-    def __init__(self) -> None:
+    def __init__(self, preferences: dict[str, Any] | None = None) -> None:
         super().__init__()
+        self.preferences = dict(preferences or advanced.load_preferences())
+        apply_palette(self.preferences)
         self.setWindowTitle("Forge · Центр системы")
         self.setMinimumSize(1040, 700)
         self.resize(1360, 860)
         self.setWindowIcon(QIcon(str(APP_ROOT / "assets" / "forge.svg")))
         self.process_rows: list[dict[str, Any]] = []
+        self._network_previous: dict[str, Any] | None = None
         self.service_rows: list[dict[str, Any]] = []
         self.startup_rows: list[dict[str, Any]] = []
         self._build_ui()
@@ -152,20 +273,23 @@ class ForgeWindow(QMainWindow):
         self.refresh_dashboard()
         self.refresh_processes()
         self.timer = QTimer(self)
-        self.timer.setInterval(2500)
+        self.timer.setInterval(int(self.preferences.get("refresh_ms", 2500)))
         self.timer.timeout.connect(self.refresh_dashboard)
         self.timer.start()
         self.statusBar().showMessage("Данные остаются на этом компьютере", 5000)
 
     def _build_ui(self) -> None:
-        shell = QWidget()
+        shell = WallpaperHost()
+        self.wallpaper_host = shell
+        shell.set_wallpaper(str(self.preferences.get("wallpaper", "")), int(self.preferences.get("wallpaper_strength", 18)))
         shell_layout = QHBoxLayout(shell)
         shell_layout.setContentsMargins(0, 0, 0, 0)
         shell_layout.setSpacing(0)
 
         sidebar = QFrame()
         sidebar.setObjectName("sidebar")
-        sidebar.setFixedWidth(238)
+        sidebar.setFixedWidth(SIDEBAR_WIDTH)
+        self.sidebar = sidebar
         side = QVBoxLayout(sidebar)
         side.setContentsMargins(18, 22, 18, 18)
         side.setSpacing(7)
@@ -264,6 +388,10 @@ class ForgeWindow(QMainWindow):
         self._page_services()
         self._page_startup()
         self._page_cleanup()
+        self._page_monitoring()
+        self._page_network()
+        self._page_diagnostics()
+        self._page_appearance()
         self.navigate("Обзор")
 
     def _scroll_page(self) -> tuple[QWidget, QVBoxLayout]:
@@ -571,6 +699,14 @@ class ForgeWindow(QMainWindow):
             self.refresh_startup()
         elif page == "Очистка":
             self.refresh_cache_info()
+        elif page == "Мониторинг":
+            self.refresh_sensors()
+        elif page == "Сеть":
+            self.refresh_network(reset=True)
+        elif page == "Диагностика":
+            self.refresh_diagnostics()
+        elif page == "Внешний вид":
+            self._sync_appearance_controls()
 
     def refresh_dashboard(self) -> None:
         try:
@@ -584,6 +720,15 @@ class ForgeWindow(QMainWindow):
             self.machine_rows["Архитектура"].setText(data["machine"])
             self.machine_rows["Графика"].setText(data["gpu"])
             self.machine_rows["Время работы"].setText(data["uptime"])
+            if hasattr(self, "cpu_history"):
+                self.cpu_history.add_value(data["cpu"])
+                self.ram_history.add_value(data["memory_percent"])
+            if self.stack.currentWidget() == self.pages.get("Сеть"):
+                self.refresh_network()
+            if self.stack.currentWidget() == self.pages.get("Мониторинг"):
+                self.refresh_sensors()
+            if self.stack.currentWidget() == self.pages.get("Диагностика"):
+                self.refresh_diagnostics()
             self.top_status.setText("●  СИСТЕМА ДОСТУПНА")
         except Exception as exc:
             self.top_status.setText("●  НЕТ ДАННЫХ")
@@ -630,6 +775,7 @@ class ForgeWindow(QMainWindow):
             return
         try:
             system.terminate_process(pid)
+            advanced.log_event(f"Отправлен сигнал завершения: {name} (PID {pid})")
             self.statusBar().showMessage(f"Сигнал отправлен процессу {pid}", 4000)
             QTimer.singleShot(500, self.refresh_processes)
         except Exception as exc:
@@ -709,6 +855,7 @@ class ForgeWindow(QMainWindow):
             return
         try:
             result = system.service_action(unit, scope, action)
+            advanced.log_event(f"Действие службы {unit}: {action} ({scope})")
             QMessageBox.information(self, "Готово", result)
             self.refresh_services()
         except Exception as exc:
@@ -780,6 +927,7 @@ class ForgeWindow(QMainWindow):
             return
         try:
             result = system.clear_user_cache()
+            advanced.log_event(f"Очистка пользовательского кэша: обработано элементов {result['removed']}")
             text = f"Обработано элементов: {result['removed']}."
             if result["errors"]:
                 text += "\n\nНе удалось удалить:\n" + "\n".join(result["errors"][:8])
@@ -788,10 +936,410 @@ class ForgeWindow(QMainWindow):
         except Exception as exc:
             QMessageBox.warning(self, "Очистка не выполнена", str(exc))
 
+
+    def _page_monitoring(self) -> None:
+        page, layout = self._scroll_page()
+        refresh = self._button("Обновить датчики", icon_name="refresh")
+        refresh.clicked.connect(self.refresh_sensors)
+        layout.addWidget(Heading("Мониторинг", "История нагрузки и данные датчиков, которые реально доступны системе.", refresh))
+        charts = QGridLayout()
+        charts.setSpacing(12)
+        self.cpu_history = HistoryChart("Загрузка процессора", PURPLE, int(self.preferences.get("history_points", 120)))
+        self.ram_history = HistoryChart("Использование памяти", GREEN, int(self.preferences.get("history_points", 120)))
+        charts.addWidget(self.cpu_history, 0, 0)
+        charts.addWidget(self.ram_history, 0, 1)
+        layout.addLayout(charts)
+        sensors, sensor_layout = self._card("Температуры и вентиляторы", "Набор датчиков зависит от оборудования, драйверов и прав доступа.")
+        self.sensor_table = self._table(["ДАТЧИК", "ИСТОЧНИК", "ТЕМПЕРАТУРА"])
+        self.sensor_table.setColumnWidth(0, 230)
+        self.sensor_table.setColumnWidth(1, 210)
+        sensor_layout.addWidget(self.sensor_table)
+        self.gpu_metrics = QLabel("Данные GPU: проверка при открытии раздела.")
+        self.gpu_metrics.setObjectName("muted")
+        self.gpu_metrics.setWordWrap(True)
+        sensor_layout.addWidget(self.gpu_metrics)
+        self.fan_metrics = QLabel("Данные вентиляторов: проверка при открытии раздела.")
+        self.fan_metrics.setObjectName("mutedSmall")
+        self.fan_metrics.setWordWrap(True)
+        sensor_layout.addWidget(self.fan_metrics)
+        layout.addWidget(sensors)
+        layout.addStretch(1)
+        self.pages["Мониторинг"] = page
+        self.stack.addWidget(page)
+
+    def refresh_sensors(self) -> None:
+        if not hasattr(self, "sensor_table"):
+            return
+        try:
+            data = advanced.get_sensor_snapshot()
+            rows = data["temperatures"]
+            self.sensor_table.setSortingEnabled(False)
+            self.sensor_table.setRowCount(len(rows))
+            for i, row in enumerate(rows):
+                value = f"{row['celsius']:.1f} °C"
+                critical = row.get("critical")
+                if critical is not None and row["celsius"] >= float(critical):
+                    value += "  ·  критично"
+                for j, text in enumerate((row["sensor"], row["source"], value)):
+                    item = QTableWidgetItem(text)
+                    if j == 2 and "критично" in text:
+                        item.setForeground(QColor(RED))
+                    elif j == 2:
+                        item.setForeground(QColor(AMBER if row["celsius"] >= 80 else GREEN))
+                    self.sensor_table.setItem(i, j, item)
+            self.sensor_table.setSortingEnabled(True)
+            if not rows:
+                self.sensor_table.setRowCount(1)
+                self.sensor_table.setItem(0, 0, QTableWidgetItem("Датчики не обнаружены"))
+                self.sensor_table.setItem(0, 1, QTableWidgetItem("ОС или оборудование не предоставили показания"))
+                self.sensor_table.setItem(0, 2, QTableWidgetItem("—"))
+            gpu = data.get("gpu")
+            if gpu:
+                parts = [gpu.get("name", "NVIDIA GPU")]
+                if gpu.get("temperature") is not None:
+                    parts.append(f"температура {gpu['temperature']:.0f} °C")
+                if gpu.get("utilization") is not None:
+                    parts.append(f"загрузка {gpu['utilization']:.0f}%")
+                if gpu.get("memory_used_mb") is not None and gpu.get("memory_total_mb"):
+                    parts.append(f"видеопамять {gpu['memory_used_mb']:.0f} / {gpu['memory_total_mb']:.0f} MiB")
+                if gpu.get("power_w") is not None:
+                    parts.append(f"{gpu['power_w']:.1f} W")
+                self.gpu_metrics.setText("GPU · " + "  •  ".join(parts))
+            else:
+                self.gpu_metrics.setText("GPU · дополнительные показатели доступны через nvidia-smi, если утилита и драйвер установлены.")
+            fans = data.get("fans", [])
+            self.fan_metrics.setText("Вентиляторы · " + ("  •  ".join(f"{x['sensor']}: {x['rpm']} RPM" for x in fans) if fans else "датчики оборотов не предоставлены системой"))
+            if data.get("gpu") and data["gpu"].get("utilization") is not None:
+                self.cpu_history.update()
+        except Exception as exc:
+            self.statusBar().showMessage(f"Мониторинг датчиков: {exc}", 6000)
+
+    def _page_network(self) -> None:
+        page, layout = self._scroll_page()
+        refresh = self._button("Обновить", icon_name="refresh")
+        refresh.clicked.connect(lambda: self.refresh_network(reset=True))
+        layout.addWidget(Heading("Сеть", "Скорость передачи, суммарный трафик и доступные интерфейсы.", refresh))
+        cards = QGridLayout()
+        cards.setSpacing(12)
+        download, self.download_value = self._card("↓  Получено")
+        self.download_value = QLabel("0 B/s")
+        self.download_value.setObjectName("bigNumber")
+        download.layout().addWidget(self.download_value)
+        self.download_total = QLabel("Всего: —")
+        self.download_total.setObjectName("muted")
+        download.layout().addWidget(self.download_total)
+        upload, _ = self._card("↑  Отправлено")
+        self.upload_value = QLabel("0 B/s")
+        self.upload_value.setObjectName("bigNumber")
+        upload.layout().addWidget(self.upload_value)
+        self.upload_total = QLabel("Всего: —")
+        self.upload_total.setObjectName("muted")
+        upload.layout().addWidget(self.upload_total)
+        cards.addWidget(download, 0, 0)
+        cards.addWidget(upload, 0, 1)
+        layout.addLayout(cards)
+        interfaces, interface_layout = self._card("Сетевые интерфейсы", "Локальные адреса показываются только в этом окне и не добавляются в диагностический отчёт.")
+        self.network_table = self._table(["ИНТЕРФЕЙС", "СОСТОЯНИЕ", "СКОРОСТЬ", "MTU", "IPv4"])
+        self.network_table.setColumnWidth(0, 220)
+        self.network_table.setColumnWidth(1, 120)
+        self.network_table.setColumnWidth(2, 120)
+        self.network_table.setColumnWidth(3, 90)
+        interface_layout.addWidget(self.network_table)
+        self.network_note = QLabel("Скорость измеряется по системным счётчикам трафика. Трафик по отдельным приложениям пока не разделяется.")
+        self.network_note.setObjectName("mutedSmall")
+        self.network_note.setWordWrap(True)
+        interface_layout.addWidget(self.network_note)
+        layout.addWidget(interfaces)
+        layout.addStretch(1)
+        self.pages["Сеть"] = page
+        self.stack.addWidget(page)
+        self.refresh_network(reset=True)
+
+    def refresh_network(self, reset: bool = False) -> None:
+        if not hasattr(self, "network_table"):
+            return
+        try:
+            current = advanced.get_network_snapshot()
+            previous = self._network_previous
+            elapsed = max(0.1, current["time"] - previous["time"]) if previous and not reset else 0.1
+            down_rate = max(0, current["bytes_recv"] - previous["bytes_recv"]) / elapsed if previous and not reset else 0
+            up_rate = max(0, current["bytes_sent"] - previous["bytes_sent"]) / elapsed if previous and not reset else 0
+            self._network_previous = current
+            self.download_value.setText(f"{fmt_bytes(down_rate)}/s")
+            self.upload_value.setText(f"{fmt_bytes(up_rate)}/s")
+            self.download_total.setText(f"Всего получено: {fmt_bytes(current['bytes_recv'])}")
+            self.upload_total.setText(f"Всего отправлено: {fmt_bytes(current['bytes_sent'])}")
+            rows = current["interfaces"]
+            self.network_table.setSortingEnabled(False)
+            self.network_table.setRowCount(len(rows))
+            for i, row in enumerate(rows):
+                speed = f"{row['speed_mbps']} Мбит/с" if row["speed_mbps"] > 0 else "—"
+                values = [row["name"], "Подключён" if row["is_up"] else "Не активен", speed, str(row["mtu"] or "—"), row["ipv4"] or "—"]
+                for j, value in enumerate(values):
+                    item = QTableWidgetItem(value)
+                    if j == 1:
+                        item.setForeground(QColor(GREEN if row["is_up"] else MUTED))
+                    self.network_table.setItem(i, j, item)
+            self.network_table.setSortingEnabled(True)
+        except Exception as exc:
+            self.network_note.setText(f"Не удалось получить сетевые счётчики: {exc}")
+
+    def _page_diagnostics(self) -> None:
+        page, layout = self._scroll_page()
+        controls = QHBoxLayout()
+        refresh = self._button("Проверить сейчас", icon_name="refresh")
+        refresh.clicked.connect(self.refresh_diagnostics)
+        export = self._button("Экспортировать отчёт…", "primary", "folder")
+        export.clicked.connect(self.export_diagnostic_report)
+        controls.addWidget(refresh)
+        controls.addWidget(export)
+        controls.addStretch(1)
+        layout.addWidget(Heading("Диагностика", "Быстрые проверки и локальный журнал действий Forge. Отчёт не отправляется автоматически."))
+        layout.addLayout(controls)
+        checks, checks_layout = self._card("Проверки состояния")
+        self.diag_status = QLabel("Нажми «Проверить сейчас», чтобы собрать сводку.")
+        self.diag_status.setObjectName("muted")
+        self.diag_status.setWordWrap(True)
+        checks_layout.addWidget(self.diag_status)
+        layout.addWidget(checks)
+        events, events_layout = self._card("Журнал Forge", "Записываются отдельные действия внутри приложения. Это не замена журналу событий Windows или systemd.")
+        self.event_view = QPlainTextEdit()
+        self.event_view.setReadOnly(True)
+        self.event_view.setObjectName("customQssEditor")
+        self.event_view.setMinimumHeight(230)
+        events_layout.addWidget(self.event_view)
+        refresh_events = self._button("Обновить журнал")
+        refresh_events.clicked.connect(self.refresh_event_log)
+        events_layout.addWidget(refresh_events)
+        layout.addWidget(events)
+        layout.addStretch(1)
+        self.pages["Диагностика"] = page
+        self.stack.addWidget(page)
+        self.refresh_diagnostics()
+
+    def refresh_diagnostics(self) -> None:
+        if not hasattr(self, "diag_status"):
+            return
+        try:
+            data = system.get_system_snapshot()
+            checks: list[tuple[str, str]] = []
+            checks.append(("ВНИМАНИЕ" if data["cpu"] >= 90 else "OK", f"Процессор: {data['cpu']:.0f}% сейчас"))
+            checks.append(("ВНИМАНИЕ" if data["memory_percent"] >= 90 else "OK", f"Память: {data['memory_percent']:.0f}% занято"))
+            checks.append(("ВНИМАНИЕ" if data["disk_percent"] >= 95 else "OK", f"Системный диск: {data['disk_percent']:.0f}% занято"))
+            sensors = advanced.get_sensor_snapshot()
+            if sensors["temperatures"]:
+                hottest = max(sensors["temperatures"], key=lambda item: item["celsius"])
+                checks.append(("ВНИМАНИЕ" if hottest["celsius"] >= 90 else "OK", f"Самый горячий доступный датчик: {hottest['sensor']} · {hottest['celsius']:.1f} °C"))
+            else:
+                checks.append(("ИНФО", "Температурные датчики не предоставлены системой"))
+            checks.append(("ИНФО", "Сводка показывает текущие значения, а не долгосрочный диагноз"))
+            self.diag_status.setText("\n".join(f"{'!' if level == 'ВНИМАНИЕ' else '✓' if level == 'OK' else 'i'}  {message}" for level, message in checks))
+            self.diag_status.setStyleSheet(f"color: {RED if any(x[0] == 'ВНИМАНИЕ' for x in checks) else TEXT};")
+            self.refresh_event_log()
+        except Exception as exc:
+            self.diag_status.setText(f"Не удалось завершить проверку: {exc}")
+
+    def refresh_event_log(self) -> None:
+        if not hasattr(self, "event_view"):
+            return
+        events = advanced.read_events(200)
+        if not events:
+            self.event_view.setPlainText("Пока нет записей. Действия приложения появятся здесь.")
+            return
+        self.event_view.setPlainText("\n".join(f"[{event['time']}] {event['level']}: {event['message']}" for event in events))
+
+    def export_diagnostic_report(self) -> None:
+        path, _ = QFileDialog.getSaveFileName(self, "Сохранить диагностический отчёт", "forge-diagnostic.json", "JSON (*.json)")
+        if not path:
+            return
+        try:
+            report = advanced.create_diagnostic_report()
+            Path(path).write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+            advanced.log_event("Создан диагностический отчёт (локальный экспорт)")
+            QMessageBox.information(self, "Отчёт сохранён", "Файл сохранён локально. Перед отправкой проверь содержимое: в нём есть названия активных процессов и сведения об оборудовании.")
+            self.refresh_event_log()
+        except Exception as exc:
+            QMessageBox.warning(self, "Не удалось создать отчёт", str(exc))
+
+    def _page_appearance(self) -> None:
+        page, layout = self._scroll_page()
+        layout.addWidget(Heading("Внешний вид", "Персонализируй тему, фон, плотность интерфейса и собственные правила QSS."))
+        appearance, appearance_layout = self._card("Основные настройки", "Настройки хранятся локально в профиле пользователя.")
+        self.theme_combo = QComboBox()
+        for label, value in (("Graphite · графитовый", "graphite"), ("Midnight · полуночный", "midnight"), ("Emerald · изумрудный", "emerald"), ("Light · светлый", "light")):
+            self.theme_combo.addItem(label, value)
+        self.accent_combo = QComboBox()
+        for label, value in ACCENT_OPTIONS.items():
+            self.accent_combo.addItem(label, value)
+        self.font_spin = QSpinBox()
+        self.font_spin.setRange(10, 17)
+        self.font_spin.setSuffix(" px")
+        self.sidebar_spin = QSpinBox()
+        self.sidebar_spin.setRange(190, 310)
+        self.sidebar_spin.setSuffix(" px")
+        self.refresh_spin = QSpinBox()
+        self.refresh_spin.setRange(1000, 10000)
+        self.refresh_spin.setSingleStep(500)
+        self.refresh_spin.setSuffix(" мс")
+        self.wallpaper_path = QLineEdit()
+        self.wallpaper_path.setReadOnly(True)
+        self.wallpaper_path.setPlaceholderText("Выбери локальное изображение…")
+        self.wallpaper_strength = QSlider(Qt.Orientation.Horizontal)
+        self.wallpaper_strength.setRange(0, 70)
+        self.wallpaper_strength.setTickInterval(10)
+        self.wallpaper_strength.setTickPosition(QSlider.TickPosition.TicksBelow)
+        self.wallpaper_strength_label = QLabel("18%")
+        self.wallpaper_strength.valueChanged.connect(lambda value: self.wallpaper_strength_label.setText(f"{value}%"))
+        self.wallpaper_choose = self._button("Выбрать обои…", icon_name="folder")
+        self.wallpaper_choose.clicked.connect(self.choose_wallpaper)
+        self.wallpaper_clear = self._button("Убрать обои")
+        self.wallpaper_clear.clicked.connect(lambda: self.wallpaper_path.clear())
+        for label, control in (("Тема", self.theme_combo), ("Акцентный цвет", self.accent_combo), ("Размер текста", self.font_spin), ("Ширина бокового меню", self.sidebar_spin), ("Частота обновления", self.refresh_spin)):
+            row = QHBoxLayout()
+            name = QLabel(label)
+            name.setObjectName("muted")
+            row.addWidget(name, 1)
+            row.addWidget(control)
+            appearance_layout.addLayout(row)
+        wallpaper_row = QHBoxLayout()
+        wallpaper_row.addWidget(self.wallpaper_path, 1)
+        wallpaper_row.addWidget(self.wallpaper_choose)
+        wallpaper_row.addWidget(self.wallpaper_clear)
+        appearance_layout.addLayout(wallpaper_row)
+        strength_row = QHBoxLayout()
+        strength_name = QLabel("Интенсивность обоев")
+        strength_name.setObjectName("muted")
+        strength_row.addWidget(strength_name)
+        strength_row.addWidget(self.wallpaper_strength, 1)
+        strength_row.addWidget(self.wallpaper_strength_label)
+        appearance_layout.addLayout(strength_row)
+        layout.addWidget(appearance)
+
+        profile, profile_layout = self._card("Профили оформления", "Экспортируй настройки в JSON или перенеси их на другой компьютер. Пути к обоям должны существовать на целевом устройстве.")
+        profile_buttons = QHBoxLayout()
+        export_profile = self._button("Экспортировать профиль…")
+        export_profile.clicked.connect(self.export_preferences)
+        import_profile = self._button("Импортировать профиль…")
+        import_profile.clicked.connect(self.import_preferences)
+        profile_buttons.addWidget(export_profile)
+        profile_buttons.addWidget(import_profile)
+        profile_buttons.addStretch(1)
+        profile_layout.addLayout(profile_buttons)
+        layout.addWidget(profile)
+
+        css, css_layout = self._card("Пользовательский CSS-подобный стиль (QSS)", "Forge использует Qt Style Sheets. Это синтаксис QSS, а не браузерный CSS: JavaScript не поддерживается. Стили применяются только к интерфейсу Forge.")
+        self.custom_qss = QPlainTextEdit()
+        self.custom_qss.setObjectName("customQssEditor")
+        self.custom_qss.setMinimumHeight(230)
+        self.custom_qss.setPlaceholderText("/* Пример: скруглить карточки */\n#panel { border-radius: 18px; }\n#navButton:checked { border: 1px solid #a99bff; }\nQPushButton { padding: 9px 14px; }")
+        css_layout.addWidget(self.custom_qss)
+        css_buttons = QHBoxLayout()
+        reset_css = self._button("Очистить пользовательские стили")
+        reset_css.clicked.connect(lambda: self.custom_qss.clear())
+        apply_css = self._button("Сохранить и применить", "primary", "check")
+        apply_css.clicked.connect(self.apply_customization)
+        css_buttons.addWidget(reset_css)
+        css_buttons.addWidget(apply_css)
+        css_buttons.addStretch(1)
+        css_layout.addLayout(css_buttons)
+        layout.addWidget(css)
+        layout.addStretch(1)
+        self.pages["Внешний вид"] = page
+        self.stack.addWidget(page)
+        self._sync_appearance_controls()
+
+    def _sync_appearance_controls(self) -> None:
+        if not hasattr(self, "theme_combo"):
+            return
+        settings = self.preferences
+        theme_index = self.theme_combo.findData(settings.get("theme", "graphite"))
+        self.theme_combo.setCurrentIndex(max(0, theme_index))
+        accent_index = self.accent_combo.findData(settings.get("accent", "#a99bff"))
+        self.accent_combo.setCurrentIndex(max(0, accent_index))
+        self.font_spin.setValue(int(settings.get("font_size", 13)))
+        self.sidebar_spin.setValue(int(settings.get("sidebar_width", 238)))
+        self.refresh_spin.setValue(int(settings.get("refresh_ms", 2500)))
+        self.wallpaper_path.setText(str(settings.get("wallpaper", "")))
+        self.wallpaper_strength.setValue(int(settings.get("wallpaper_strength", 18)))
+        self.custom_qss.setPlainText(str(settings.get("custom_qss", "")))
+
+    def choose_wallpaper(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(self, "Выбери обои", str(Path.home()), "Изображения (*.png *.jpg *.jpeg *.webp *.bmp *.gif);;Все файлы (*)")
+        if path:
+            pixmap = QPixmap(path)
+            if pixmap.isNull():
+                QMessageBox.warning(self, "Не удалось открыть изображение", "Выбери поддерживаемое изображение PNG, JPEG, WebP, BMP или GIF.")
+                return
+            self.wallpaper_path.setText(path)
+
+    def export_preferences(self) -> None:
+        path, _ = QFileDialog.getSaveFileName(self, "Экспортировать профиль Forge", "forge-profile.json", "JSON (*.json)")
+        if not path:
+            return
+        try:
+            Path(path).write_text(json.dumps(self.preferences, ensure_ascii=False, indent=2), encoding="utf-8")
+            advanced.log_event("Экспортирован профиль оформления")
+            self.statusBar().showMessage("Профиль оформления экспортирован", 5000)
+        except OSError as exc:
+            QMessageBox.warning(self, "Ошибка экспорта", str(exc))
+
+    def import_preferences(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(self, "Импортировать профиль Forge", str(Path.home()), "JSON (*.json)")
+        if not path:
+            return
+        try:
+            payload = json.loads(Path(path).read_text(encoding="utf-8"))
+            if not isinstance(payload, dict):
+                raise ValueError("Файл профиля должен содержать JSON-объект.")
+            allowed = advanced.default_preferences()
+            if any(key not in allowed for key in payload):
+                raise ValueError("Профиль содержит неизвестные параметры. Импорт отменён.")
+            merged = advanced.default_preferences()
+            merged.update(payload)
+            advanced.save_preferences(merged)
+            self.preferences = advanced.load_preferences()
+            self._sync_appearance_controls()
+            self.apply_customization()
+            advanced.log_event("Импортирован профиль оформления")
+        except (OSError, ValueError, TypeError) as exc:
+            QMessageBox.warning(self, "Не удалось импортировать профиль", str(exc))
+
+    def apply_customization(self) -> None:
+        settings = dict(self.preferences)
+        settings.update({
+            "theme": str(self.theme_combo.currentData() or "graphite"),
+            "accent": str(self.accent_combo.currentData() or "#a99bff"),
+            "font_size": self.font_spin.value(),
+            "sidebar_width": self.sidebar_spin.value(),
+            "refresh_ms": self.refresh_spin.value(),
+            "wallpaper": self.wallpaper_path.text().strip(),
+            "wallpaper_strength": self.wallpaper_strength.value(),
+            "custom_qss": self.custom_qss.toPlainText()[:30000],
+        })
+        if settings["wallpaper"] and not Path(settings["wallpaper"]).expanduser().is_file():
+            QMessageBox.warning(self, "Обои не найдены", "Файл не существует. Выбери его заново или очисти поле.")
+            return
+        advanced.save_preferences(settings)
+        self.preferences = advanced.load_preferences()
+        apply_palette(self.preferences)
+        self.sidebar.setFixedWidth(SIDEBAR_WIDTH)
+        self.wallpaper_host.set_wallpaper(str(self.preferences.get("wallpaper", "")), int(self.preferences.get("wallpaper_strength", 18)))
+        app = QApplication.instance()
+        if app is not None:
+            font = QFont("Inter", FONT_SIZE)
+            if not font.exactMatch():
+                font = QFont("Noto Sans", FONT_SIZE)
+            app.setFont(font)
+        self.setFont(QFont("Inter", FONT_SIZE))
+        self._apply_theme()
+        self.timer.setInterval(int(self.preferences.get("refresh_ms", 2500)))
+        self.statusBar().showMessage("Настройки оформления сохранены и применены", 5000)
+        advanced.log_event("Применены настройки оформления")
+
     def _apply_theme(self) -> None:
-        self.setStyleSheet(f"""
-            QWidget {{ background: transparent; color: {TEXT}; font-family: 'Inter', 'Noto Sans', 'Segoe UI', sans-serif; font-size: 13px; }}
-            QMainWindow, QWidget#root {{ background: {BG}; }}
+        base_style = f"""
+            QWidget {{ background: transparent; color: {TEXT}; font-family: 'Inter', 'Noto Sans', 'Segoe UI', sans-serif; font-size: {FONT_SIZE}px; }}
+            QMainWindow {{ background: {BG}; }}
             #sidebar {{ background: {SIDEBAR}; border-right: 1px solid {BORDER}; }}
             #logoMark {{ background: transparent; }}
             #brandName {{ font-size: 17px; font-weight: 800; letter-spacing: 2px; color: {TEXT}; }}
@@ -808,7 +1356,7 @@ class ForgeWindow(QMainWindow):
             #statusTag {{ color: {GREEN}; background: #1c2b27; border: 1px solid #2c4940; padding: 7px 10px; border-radius: 7px; font-size: 10px; font-weight: 700; }}
             #pageTitle {{ font-size: 25px; font-weight: 750; color: {TEXT}; }}
             #pageSubtitle {{ font-size: 12px; color: {MUTED}; }}
-            #hero {{ background: qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #24213a,stop:0.55 #1b1b27,stop:1 #20202c); border: 1px solid #3b3555; border-radius: 14px; }}
+            #hero {{ background: qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 {PURPLE_DARK},stop:0.55 {PANEL},stop:1 {SIDEBAR}); border: 1px solid {BORDER}; border-radius: 14px; }}
             #heroOverline {{ color: {PURPLE}; font-size: 9px; font-weight: 800; letter-spacing: 1.5px; }}
             #heroTitle {{ font-size: 25px; font-weight: 750; }}
             #heroSubtitle {{ color: #b9b5d0; font-size: 12px; }}
@@ -842,7 +1390,13 @@ class ForgeWindow(QMainWindow):
             QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0; }}
             QStatusBar {{ background: {SIDEBAR}; color: {MUTED}; border-top: 1px solid {BORDER}; font-size: 10px; }}
             QMessageBox {{ background: {PANEL}; }}
-        """)
+            QSpinBox, QPlainTextEdit {{ background: {PANEL}; color: {TEXT}; border: 1px solid {BORDER}; border-radius: 8px; padding: 8px; selection-background-color: {PURPLE_DARK}; }}
+            #customQssEditor {{ font-family: 'JetBrains Mono', 'Consolas', monospace; font-size: 12px; }}
+            QSlider::groove:horizontal {{ height: 5px; background: {BORDER}; border-radius: 2px; }}
+            QSlider::handle:horizontal {{ width: 15px; margin: -5px 0; background: {PURPLE}; border-radius: 7px; }}
+            #historyChart {{ background: transparent; }}
+        """
+        self.setStyleSheet(base_style + "\n" + self.preferences.get("custom_qss", ""))
 
 
 def main() -> int:
@@ -850,11 +1404,14 @@ def main() -> int:
     app.setApplicationName("Forge")
     app.setOrganizationName("W0rd3r566")
     app.setStyle("Fusion")
-    font = QFont("Inter", 10)
+    preferences = advanced.load_preferences()
+    apply_palette(preferences)
+    font = QFont("Inter", FONT_SIZE)
     if not font.exactMatch():
-        font = QFont("Noto Sans", 10)
+        font = QFont("Noto Sans", FONT_SIZE)
     app.setFont(font)
-    window = ForgeWindow()
+    advanced.log_event(f"Forge {__version__} запущен")
+    window = ForgeWindow(preferences)
     window.show()
     return app.exec()
 
