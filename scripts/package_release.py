@@ -11,11 +11,15 @@ import tarfile
 import tempfile
 import zipfile
 from pathlib import Path
+import sys
+
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
 
 from forge import __version__
 
 
-ROOT = Path(__file__).resolve().parents[1]
 DIST = ROOT / "dist"
 DESKTOP_ENTRY = """[Desktop Entry]
 Type=Application
@@ -39,27 +43,38 @@ def machine_labels() -> tuple[str, str, str, str]:
 
 
 def install_readme(platform_name: str) -> str:
-    return f"""Forge System Center {__version__}
-Platform bundle: {platform_name}
-
-Windows:
-  Extract the ZIP archive and launch ForgeSystemCenter.exe.
-
-macOS:
-  Extract the ZIP archive and move ForgeSystemCenter.app to Applications.
-  This build is unsigned. macOS may show a Gatekeeper warning.
-
-Linux:
-  Run ./ForgeSystemCenter from a terminal or your desktop session.
-  The binary is built for glibc { '2.35+' if platform.machine().lower() in {'x86_64', 'amd64'} else '2.39+' }.
-  X11/XWayland or a compatible Qt platform plugin and the usual desktop
-  runtime libraries are required. Recent Debian/Ubuntu, Fedora, openSUSE,
-  Arch, CachyOS and related distributions are the target family.
-
-The portable bundle does not install itself or modify system settings.
-Forge stores its preferences in the current user's configuration directory.
-See https://github.com/W0rd3r566/Forge-System-Center for documentation.
-"""
+    lines = [
+        f"Forge System Center {__version__}",
+        f"Platform bundle: {platform_name}",
+        "",
+    ]
+    if platform_name.startswith("Windows"):
+        lines.extend([
+            "Extract the ZIP archive and launch ForgeSystemCenter.exe.",
+            "This portable build is unsigned; Windows SmartScreen may show a warning.",
+        ])
+    elif platform_name.startswith("macOS"):
+        lines.extend([
+            "Extract the ZIP archive and move ForgeSystemCenter.app to Applications.",
+            "This build is unsigned; macOS may show a Gatekeeper warning.",
+        ])
+    else:
+        _, _, _, glibc_min = machine_labels()
+        lines.extend([
+            "Run ./ForgeSystemCenter from a terminal or your desktop session.",
+            f"The binary requires glibc {glibc_min} or newer.",
+            "X11/XWayland or a compatible Qt platform plugin and usual desktop",
+            "runtime libraries are required. Recent Debian/Ubuntu, Fedora,",
+            "openSUSE, Arch, CachyOS and related distributions are target families.",
+        ])
+    lines.extend([
+        "",
+        "The portable bundle does not install itself or modify system settings.",
+        "Forge stores preferences in the current user's configuration directory.",
+        "See https://github.com/W0rd3r566/Forge-System-Center for documentation.",
+        "",
+    ])
+    return "\n".join(lines)
 
 
 def require_file(path: Path) -> None:
