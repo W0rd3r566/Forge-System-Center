@@ -4,7 +4,7 @@
 
 <h1 align="center">Forge System Center</h1>
 <p align="center"><strong>Understand your system. Keep your data yours.</strong></p>
-<p align="center"><a href="README.md">Русская документация</a> · <a href="#features">Features</a> · <a href="#installation">Installation</a> · <a href="#customization">Customization</a></p>
+<p align="center"><a href="README.md">Русская документация</a> · <a href="#features">Features</a> · <a href="#installation">Installation</a> · <a href="#customization">Customization</a> · <a href="docs/CUSTOMIZATION.en.md">Full QSS handbook</a></p>
 
 <p align="center">
   <a href="https://github.com/W0rd3r566/Forge-System-Center/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/W0rd3r566/Forge-System-Center/ci.yml?branch=main&style=for-the-badge&label=CI" alt="CI status"></a>
@@ -42,6 +42,17 @@ Forge is local-first: no account, built-in analytics, or automatic upload of sys
     <td><h3>⌘ Command palette</h3>Press Ctrl+K to navigate sections and run common actions from one searchable list.</td>
     <td><h3>▤ Hardware and history</h3>CPU, memory, graphics and sensor details plus persistent local performance charts and CSV export.</td>
   </tr>
+  <tr>
+    <td><h3>◉ Mini monitor and tray</h3>A floating CPU/RAM/disk widget, configurable opacity, and tray-menu controls for Forge.</td>
+    <td><h3>⚑ Smart alerts</h3>Configurable CPU, memory, disk and available temperature thresholds with local notifications.</td>
+  </tr>
+  <tr>
+    <td><h3>⌁ Network lab</h3>Read-only checks for local interfaces, DNS servers, hostname resolution, external ICMP and the default route.</td>
+    <td><h3>↶ Change journal</h3>Local action history and safe rollback for settings, selected user startup changes and supported service actions.</td>
+  </tr>
+  <tr>
+    <td colspan="2"><h3>◈ Work modes and QSS presets</h3>Balanced, Gaming, Work and Quiet modes. Customize the appearance with Liquid Glass, Soft Acrylic, Miku Cyan, Minimal and custom QSS.</td>
+  </tr>
 </table>
 
 ## Customization
@@ -51,9 +62,12 @@ Open **Appearance** to make Forge your own:
 - **Themes:** Graphite, Midnight, Emerald and Light.
 - **Accent colors:** lavender, blue, mint, pink, amber, coral and teal.
 - **Wallpapers:** PNG, JPEG, WebP, BMP and GIF. Images remain local and are blended into the window background using an adjustable intensity.
-- **Interface density:** font size, sidebar width and data refresh interval.
-- **Custom styles:** Qt Style Sheets (QSS) can override the built-in theme. QSS is CSS-like, but uses Qt rules; it does not support JavaScript or a browser DOM.
-- **Profiles:** export settings to JSON and import them on another computer. The wallpaper image itself is not embedded in the profile, so its path must exist on the target device too.
+- **Fonts and geometry:** font family and size, sidebar width, corner radius and density.
+- **Liquid Glass:** transparent window background, local wallpaper, softened backdrop and a configurable frosted tint. Real desktop blur depends on the window compositor.
+- **QSS presets:** Liquid Glass, Soft Acrylic, Miku Cyan and Minimal. Import/export your own `.qss` or plain-text `.css` files.
+- **Monitoring:** warning thresholds, floating mini monitor, opacity and refresh interval.
+- **Work modes:** Balanced, Gaming, Work and Quiet. Appearance settings can also be imported/exported as JSON profiles.
+- **Full handbook:** [widget selectors, QSS examples, states and limitations](docs/CUSTOMIZATION.en.md). QSS styles Qt widgets; it does not support JavaScript, a browser DOM, `backdrop-filter`, `box-shadow` or CSS animations.
 
 Example QSS:
 
