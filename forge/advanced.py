@@ -66,6 +66,7 @@ def load_preferences() -> dict[str, Any]:
         settings["theme"] = "graphite"
     if not isinstance(settings["accent"], str) or not re.fullmatch(r"#[0-9a-fA-F]{6}", settings["accent"]):
         settings["accent"] = "#a99bff"
+    defaults = default_preferences()
     try:
         settings["font_size"] = max(10, min(24, int(settings["font_size"])))
         settings["sidebar_width"] = max(190, min(360, int(settings["sidebar_width"])))
