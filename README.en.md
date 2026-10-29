@@ -90,6 +90,20 @@ Paste your rules into the QSS editor and select **Save and apply**. Custom style
 
 ## Installation
 
+### Ready-to-download builds
+
+Recommended: download the archive for your OS and architecture from [GitHub Releases](https://github.com/W0rd3r566/Forge-System-Center/releases/latest). The [platform guide](docs/PLATFORMS.en.md) lists system requirements, package types and detailed install instructions.
+
+| Platform | Available package |
+| --- | --- |
+| Windows x64 / ARM64 | ZIP with portable EXE |
+| Debian / Ubuntu x86_64 and ARM64 | DEB |
+| Fedora and RPM-compatible distributions | RPM |
+| CachyOS / Arch / Manjaro / other Linux | TAR.GZ |
+| macOS Intel / Apple Silicon | ZIP with .app bundle |
+
+32-bit Windows and Linux are currently outside the build matrix because Qt 6 through PySide6 does not provide suitable supported wheels for these targets. Choose x64 for Intel/AMD Windows computers and ARM64 for Windows on Arm devices. Linux binaries have different minimum glibc requirements, documented in the platform guide.
+
 ### Linux · CachyOS, Arch, Debian and more
 
 Python 3.10 or newer is required. Arch/CachyOS may need the Qt/XCB runtime libraries:
